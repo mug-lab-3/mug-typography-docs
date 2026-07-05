@@ -1,0 +1,1 @@
+const o="/mug-typography-docs/image/throb.webp",p="/mug-typography-docs/image/flap.webp",s="/mug-typography-docs/image/squish.webp",a="/mug-typography-docs/image/fizz.webp";export{o as _,p as a,s as b,a as c};
