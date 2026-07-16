@@ -1,0 +1,1 @@
+const o="/mug-typography-docs/image/gradient_colorspace_oklab.webp",a="/mug-typography-docs/image/gradient_colorspace_okhsl.webp",s="/mug-typography-docs/image/gradient_colorspace_okhsv.webp",p="/mug-typography-docs/image/gradient_colorspace_linear_rgb.webp",r="/mug-typography-docs/image/gradient_crayon.webp";export{o as _,a,s as b,p as c,r as d};
