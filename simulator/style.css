@@ -305,6 +305,24 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* SVG icons inherit the button's colour (fill="currentColor"), so the states
+   below drive them the same way they drive the text-glyph buttons. */
+.timeline button > svg {
+  display: block;
+  pointer-events: none;
+}
+
+/* The loop toggle carries its on/off state in colour: inactive is the same
+   muted grey as the other transport icons, active picks up the accent. */
+.timeline .loop-button {
+  opacity: 0.5;
+}
+
+.timeline .loop-button.active {
+  opacity: 1;
+  color: var(--mt-accent);
+}
+
 .status-bar {
   min-height: 18px;
   padding: 2px 10px;
