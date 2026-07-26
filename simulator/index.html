@@ -305,6 +305,9 @@
   }
   .sample-card:hover { border-color: var(--mt-accent); background: #2a2d2e; }
   .sample-card:focus-visible { outline: 1px solid var(--mt-accent); outline-offset: 1px; }
+  /* A gallery script is fetched when its card is opened; this marks the
+     card whose fetch failed so the click does not just appear to do nothing. */
+  .sample-card-failed { border-color: #f14c4c; }
   /* The aspect ratio is reserved up front so the card keeps its size while
      the thumbnail is still loading (see createThumbnailObserver). */
   .sample-card-preview {
