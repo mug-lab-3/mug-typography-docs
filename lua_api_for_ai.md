@@ -15,11 +15,11 @@ seconds or frames); default values of `?` arguments; permitted string values (a
 (that `duration <= 0` raises); table argument shapes (`keys` in `mt.keyframes`).
 
 Required behaviour: if the requested script depends on any of those and
-`03_mt_reference.md` is not in your context, fetch it from
-`https://mug-lab-3.github.io/mug-typography-docs/03_mt_reference.md`; if you
-cannot fetch URLs, **stop and ask the user for `03_mt_reference.md`**, naming
-the function. Do not guess. Do not swap in another function to avoid asking.
-Guessed enum values and units are the most common failure.
+`03_mt_reference.md` is not in your context, **stop and ask the user to attach
+`03_mt_reference.md`**, naming the function you need it for. It ships in the
+plugin's distribution ZIP at `scripting-simulator/docs/en/03_mt_reference.md`
+(`docs/ja/` for Japanese). Do not guess. Do not swap in another function to
+avoid asking. Guessed enum values and units are the most common failure.
 
 Proceed without it only when the call uses required arguments whose meaning is
 unambiguous from the name (`mt.lerp(from, to, t)`, `mt.saturate(value)`).
@@ -34,9 +34,7 @@ Only `03_mt_reference.md` carries facts this file lacks. `01_concepts.md` and
 `04_appendix.md` are longer explanations of material already condensed here — you
 do not need them to write correct code.
 
-`03_mt_reference.md`
-(`https://mug-lab-3.github.io/mug-typography-docs/03_mt_reference.md`) — has: an
-"Index by Purpose" table at the top, then a
+`03_mt_reference.md` — has: an "Index by Purpose" table at the top, then a
 per-function `### ` heading with Arguments table (Argument/Type/Unit/Default,
 Default = `Required` or the value), Return Value table, Constraints and Errors
 table. Use: when you know the function, jump to its `### ` heading and read the
