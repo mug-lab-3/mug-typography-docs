@@ -131,28 +131,24 @@
   .app-menu-destructive { color: #f14c4c; }
   .app-menu-destructive:hover { background: #5a1d1d; }
 
-  /* Below the combined min-width of the editor pane + #app, the shell
-     scrolls horizontally rather than shrinking #app further: the simulator
-     UI (Inspector, Timeline) stops being usable much narrower than this,
-     while the editor pane can give up space down to a bare-minimum width. */
-  .web-shell { display: flex; flex-direction: row; flex: 1; min-height: 0; overflow-x: auto; }
+  .web-shell { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
   .web-editor-pane {
-    display: flex;
-    flex-direction: column;
-    width: 45%;
-    min-width: 180px;
-    flex-shrink: 3;
-  }
-  #lua-editor { flex: 1; min-height: 0; position: relative; }
-  .log-panel {
-    flex: 0 0 140px;
-    display: flex;
-    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
     min-height: 0;
-    border-top: 1px solid #444;
+  }
+  #lua-editor { width: 100%; height: 100%; min-height: 0; position: relative; }
+  .log-panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
     background: #1e1e1e;
   }
   .log-panel-header {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -162,6 +158,22 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     border-bottom: 1px solid #333;
+    background: #252526;
+  }
+  .log-panel-header::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    width: 28px;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(121, 121, 121, 0.45);
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .mt-editor-grid:has(.dv-sash:hover) .log-panel-header::before {
+    background: color-mix(in srgb, var(--mt-accent) 65%, transparent);
   }
   .log-panel-clear {
     background: transparent;
@@ -198,7 +210,7 @@
     border: 2px dashed #007acc;
     pointer-events: none;
   }
-  #app { flex: 1; flex-shrink: 1; min-width: 280px; }
+  #app { width: 100%; height: 100%; min-width: 0; min-height: 0; }
   .doc-viewer-overlay {
     display: none;
     position: fixed;
@@ -564,7 +576,7 @@
   <div class="web-shell" id="web-shell">
     <div class="web-editor-pane" id="web-editor-pane">
       <div id="lua-editor"></div>
-      <div class="log-panel">
+      <div class="log-panel" id="log-panel">
         <div class="log-panel-header">
           <span>Log</span>
           <button id="log-panel-clear" class="log-panel-clear" type="button">Clear</button>
@@ -572,7 +584,6 @@
         <div class="log-panel-body" id="log-panel-body"></div>
       </div>
     </div>
-    <div class="sash-vertical" id="web-pane-sash"></div>
     <div id="app"></div>
   </div>
 </div>

@@ -4,7 +4,8 @@
 -- no I/O or host dependencies. Most helpers are pure functions; mt.storage
 -- holds initialization-time constants, and documented mt.layout helpers mutate
 -- their target objects. Host-side responsibilities (print wiring, randomseed
--- reset, sandboxing) live outside this file.
+-- reset, sandboxing) live outside this file, and helpers the host implements in
+-- C++ live in prelude_drawing_path.lua, which only the simulator loads.
 --
 -- Maintainability rules for this file:
 --   * Every public function carries LuaLS (---@) type annotations.
@@ -23,6 +24,13 @@ mt.text = {}
 -- mt.__freeze (see the storage section at the bottom of this file).
 ---@type table
 mt.storage = mt.storage or {}
+
+-- mt.svg_path / MtDrawingPath are NOT defined here: the host plugin implements
+-- them in C++ (installPathScriptFunctions in src/scripting/ScriptPathBindings.cc),
+-- which builds a real BLPath instead of accumulating SVG path data. The simulator,
+-- which has no Blend2D, loads the pure-Lua stand-in from prelude_drawing_path.lua
+-- as a separate chunk right after this file. Keep the two implementations
+-- observably identical; change one and you must change the other.
 
 ---------------------------------------------------------------------------
 -- Range / interpolation utilities
@@ -149,15 +157,31 @@ function mt.falloff(distance, radius)
     return result
 end
 
----Converts a polar direction into a canvas-space offset pair, so scatter,
----gather, and orbit motions can be written without spelling out cos/sin.
+---Converts a polar direction into a screen-oriented offset pair (Y grows
+---downward), so the vertical component must be negated before it is added to
+---offset_y.
 ---@param angleDegrees number direction in degrees, 0 = right, positive clockwise
 ---@param radius number distance along that direction
 ---@return number offsetX
 ---@return number offsetY
+---@deprecated Use mt.polar_offset_2d, which returns Y-up canvas offsets.
 function mt.polar_offset(angleDegrees, radius)
     local radians = angleDegrees * (math.pi / 180.0)
     return math.cos(radians) * radius, math.sin(radians) * radius
+end
+
+---Converts a polar direction into a Y-up canvas offset pair, so scatter,
+---gather, and orbit motions can be written without spelling out cos/sin.
+---The angle follows the screen convention used everywhere else in the API
+---(0 = right, positive clockwise, 90 = down), while the returned vector is in
+---Y-up canvas coordinates and can be added straight to offset_x / offset_y.
+---@param angleDegrees number direction in degrees, 0 = right, positive clockwise
+---@param radius number distance along that direction
+---@return number offsetX
+---@return number offsetY
+function mt.polar_offset_2d(angleDegrees, radius)
+    local radians = angleDegrees * (math.pi / 180.0)
+    return math.cos(radians) * radius, -math.sin(radians) * radius
 end
 
 ---Periodic ramp 0 -> 1 repeating every `period` seconds.
@@ -888,12 +912,10 @@ function mt.projectile_2d(paramsOrT, speed, angleDegrees, gravity, spin, drag)
     end
 
     local elapsed = math.max(t, 0.0)
-    -- polar_offset works in screen orientation (Y grows downward, angles turn
-    -- clockwise) so that a launch angle reads the same as every other angle in
-    -- the API. Canvas offsets are Y-up, so the vertical component is flipped
-    -- here once; gravity can then simply subtract from Y.
-    local velocityX, screenVelocityY = mt.polar_offset(launchAngle, launchSpeed)
-    local velocityY = -screenVelocityY
+    -- The launch angle reads the same as every other angle in the API (screen
+    -- orientation, clockwise), while polar_offset_2d hands back a Y-up velocity
+    -- so gravity can simply subtract from Y.
+    local velocityX, velocityY = mt.polar_offset_2d(launchAngle, launchSpeed)
 
     -- Without drag this is the plain ballistic solution. With drag the velocity
     -- decays exponentially, so displacement uses its integral (1 - e^-kt) / k.
@@ -1076,6 +1098,142 @@ local function layoutSetCharacterPoint(ctx, character, naturalX, naturalY, targe
     local currentX, currentY = layoutMapPoint(layoutCharacterMatrix(ctx, character), pointX, pointY)
     character.offset_x = character.offset_x + (targetPixelX - currentX) / ctx.canvas.width
     character.offset_y = character.offset_y - (targetPixelY - currentY) / ctx.canvas.height
+end
+
+---@class MtLayoutLineGroup
+---@field line_index integer shaped line index
+---@field item_count integer number of characters in this line or vertical column
+---@field items table[] characters in reading order within this line or vertical column
+
+---Groups shaped characters by line_index while preserving the host reading order.
+---In vertical writing, each returned line represents one column.
+---@param ctx table OnLayout context
+---@return MtLayoutLineGroup[]
+function mt.layout.group_by_line(ctx)
+    assert(ctx and ctx.chars and type(ctx.char_count) == "number",
+        "group_by_line requires an OnLayout context")
+
+    local groups = {}
+    local groupsByLineIndex = {}
+    for characterIndex = 1, ctx.char_count do
+        local character = ctx.chars[characterIndex]
+        local lineIndex = character.line_index
+        assert(type(lineIndex) == "number", "group_by_line requires character line_index values")
+
+        local group = groupsByLineIndex[lineIndex]
+        if group == nil then
+            group = {
+                line_index = lineIndex,
+                item_count = 0,
+                items = {},
+            }
+            groups[#groups + 1] = group
+            groupsByLineIndex[lineIndex] = group
+        end
+
+        group.items[#group.items + 1] = character
+        group.item_count = #group.items
+    end
+    return groups
+end
+
+---@param geometry table
+---@param baseCenterX number
+---@param baseCenterY number
+---@param anchor string
+---@param character boolean
+---@return number, number
+local function layoutResolvePivotAnchor2D(geometry, baseCenterX, baseCenterY, anchor, character)
+    local targetX = geometry.bounds_center_x
+    local targetY = geometry.bounds_center_y
+    local halfWidth = geometry.bounds_width * 0.5
+    local halfHeight = geometry.bounds_height * 0.5
+
+    if anchor == "top" then
+        targetY = targetY + halfHeight
+    elseif anchor == "bottom" then
+        targetY = targetY - halfHeight
+    elseif anchor == "left" then
+        targetX = targetX - halfWidth
+    elseif anchor == "right" then
+        targetX = targetX + halfWidth
+    elseif anchor == "top_left" then
+        targetX = targetX - halfWidth
+        targetY = targetY + halfHeight
+    elseif anchor == "top_right" then
+        targetX = targetX + halfWidth
+        targetY = targetY + halfHeight
+    elseif anchor == "bottom_left" then
+        targetX = targetX - halfWidth
+        targetY = targetY - halfHeight
+    elseif anchor == "bottom_right" then
+        targetX = targetX + halfWidth
+        targetY = targetY - halfHeight
+    elseif anchor == "baseline" and character then
+        targetX = geometry.canvas_origin_x
+        targetY = geometry.canvas_origin_y
+    elseif anchor == "vertical_start" and character then
+        targetX = geometry.vertical_origin_x
+        targetY = geometry.vertical_origin_y
+    elseif anchor == "vertical_center" and character then
+        targetX = geometry.vertical_origin_x
+        targetY = geometry.vertical_origin_y + geometry.advance_y * 0.5
+    elseif anchor == "vertical_end" and character then
+        targetX = geometry.vertical_origin_x
+        targetY = geometry.vertical_origin_y + geometry.advance_y
+    elseif anchor ~= "center" then
+        if anchor == "baseline"
+            or anchor == "vertical_start"
+            or anchor == "vertical_center"
+            or anchor == "vertical_end" then
+            error("pivot_at_2d: anchor '" .. anchor .. "' is only available for characters", 3)
+        else
+            error("pivot_at_2d: unknown anchor '" .. tostring(anchor) .. "'", 3)
+        end
+    end
+
+    return 0.5 + targetX - baseCenterX, 0.5 + targetY - baseCenterY
+end
+
+---Sets a semantic 2D pivot on a character or part and compensates its offset
+---so the current pre-3D pose does not move.
+---@param ctx table OnLayout context
+---@param item table character or part
+---@param anchor string semantic bounds or writing-origin anchor
+function mt.layout.pivot_at_2d(ctx, item, anchor)
+    assert(ctx and ctx.canvas and ctx.chars, "pivot_at_2d requires an OnLayout context")
+    assert(type(item) == "table" and item.geometry, "pivot_at_2d requires a character or part")
+    assert(type(anchor) == "string", "pivot_at_2d anchor must be a string")
+    assert(ctx.canvas.width > 0.0 and ctx.canvas.height > 0.0,
+        "pivot_at_2d requires positive canvas dimensions")
+
+    local isPart = item.character_index ~= nil
+    local isCharacter = not isPart and item.part_start ~= nil
+    assert(isCharacter or isPart, "pivot_at_2d requires a character or part")
+
+    local baseCenterX = item.geometry.bounds_center_x
+    local baseCenterY = item.geometry.bounds_center_y
+    local matrixBefore
+    if isPart then
+        baseCenterX = item.geometry.canvas_center_x
+        baseCenterY = item.geometry.canvas_center_y
+        matrixBefore = layoutPartMatrix(ctx, item)
+    else
+        matrixBefore = layoutCharacterMatrix(ctx, item)
+    end
+
+    item.pivot_x, item.pivot_y =
+        layoutResolvePivotAnchor2D(item.geometry, baseCenterX, baseCenterY, anchor, isCharacter)
+
+    local matrixAfter
+    if isPart then
+        matrixAfter = layoutPartMatrix(ctx, item)
+    else
+        matrixAfter = layoutCharacterMatrix(ctx, item)
+    end
+
+    item.offset_x = item.offset_x + (matrixBefore.tx - matrixAfter.tx) / ctx.canvas.width
+    item.offset_y = item.offset_y - (matrixBefore.ty - matrixAfter.ty) / ctx.canvas.height
 end
 
 local function layoutCharacterOrigin(character, writingMode)
@@ -2516,6 +2674,70 @@ function mt.text.slice(text, startChar, endChar)
     return result
 end
 
+---@param value integer
+---@param low integer
+---@param high integer
+---@return boolean
+local function textCodepointInRange(value, low, high)
+    return value >= low and value <= high
+end
+
+---Classifies the first Unicode code point of a text cluster for script-aware animation.
+---@param text string
+---@return "kanji"|"hiragana"|"katakana"|"punctuation"|"latin"|"digit"|"space"|"other"
+function mt.text.classify(text)
+    assert(type(text) == "string", "mt.text.classify: text must be a string")
+
+    local codepoint
+    if #text > 0 then
+        codepoint = utf8.codepoint(text, 1, 1)
+    end
+    local result = "other"
+    if codepoint ~= nil then
+        if codepoint == 0x20
+            or codepoint == 0x09
+            or codepoint == 0x0a
+            or codepoint == 0x0d
+            or codepoint == 0xa0
+            or codepoint == 0x3000 then
+            result = "space"
+        elseif textCodepointInRange(codepoint, 0x30, 0x39)
+            or textCodepointInRange(codepoint, 0xff10, 0xff19) then
+            result = "digit"
+        elseif textCodepointInRange(codepoint, 0x41, 0x5a)
+            or textCodepointInRange(codepoint, 0x61, 0x7a)
+            or textCodepointInRange(codepoint, 0xc0, 0x24f)
+            or textCodepointInRange(codepoint, 0x1e00, 0x1eff)
+            or textCodepointInRange(codepoint, 0xff21, 0xff3a)
+            or textCodepointInRange(codepoint, 0xff41, 0xff5a) then
+            result = "latin"
+        elseif textCodepointInRange(codepoint, 0x3040, 0x309f) then
+            result = "hiragana"
+        elseif codepoint == 0x30fb
+            or textCodepointInRange(codepoint, 0x21, 0x2f)
+            or textCodepointInRange(codepoint, 0x3a, 0x40)
+            or textCodepointInRange(codepoint, 0x5b, 0x60)
+            or textCodepointInRange(codepoint, 0x7b, 0x7e)
+            or textCodepointInRange(codepoint, 0x3001, 0x303f)
+            or textCodepointInRange(codepoint, 0xff01, 0xff0f)
+            or textCodepointInRange(codepoint, 0xff1a, 0xff20)
+            or textCodepointInRange(codepoint, 0xff3b, 0xff40)
+            or textCodepointInRange(codepoint, 0xff5b, 0xff65) then
+            result = "punctuation"
+        elseif textCodepointInRange(codepoint, 0x30a0, 0x30ff)
+            or textCodepointInRange(codepoint, 0x31f0, 0x31ff)
+            or textCodepointInRange(codepoint, 0xff66, 0xff9f) then
+            result = "katakana"
+        elseif textCodepointInRange(codepoint, 0x3400, 0x4dbf)
+            or textCodepointInRange(codepoint, 0x4e00, 0x9fff)
+            or textCodepointInRange(codepoint, 0xf900, 0xfaff)
+            or textCodepointInRange(codepoint, 0x20000, 0x323af) then
+            result = "kanji"
+        end
+    end
+    return result
+end
+
 ---------------------------------------------------------------------------
 -- Timeline progress helpers
 ---------------------------------------------------------------------------
@@ -2592,6 +2814,202 @@ function mt.timeline.intro_outro_seconds(ctx, introSeconds, outroSeconds, fallba
     end
 
     return introValue, outroValue
+end
+
+---@class MtTimelineChainOptions
+---@field fallback_duration? number virtual clip duration when the host timeline is unavailable
+
+---@class MtTimelineChainSegment
+---@field duration? number|"remaining" animated segment duration in seconds, or the remaining clip span
+---@field hold? number|"remaining" hold segment duration in seconds, or the remaining clip span
+---@field evaluate? fun(segmentCtx: table, previousValue: any): any pure evaluator for an animated segment
+
+local setTimelineContextMetatable = setmetatable
+
+---@param ctx table
+---@param localTime number
+---@param duration number
+---@return table
+local function makeTimelineChainContext(ctx, localTime, duration)
+    local segmentCtx = {}
+    for key, value in pairs(ctx) do
+        segmentCtx[key] = value
+    end
+
+    local framesPerSecond = type(ctx.fps) == "number" and ctx.fps or 0.0
+    local durationFrames = duration * framesPerSecond
+    local progress = 1.0
+    if duration > 0.0 then
+        progress = mt.saturate(localTime / duration)
+    end
+
+    segmentCtx.time = localTime
+    segmentCtx.frame = localTime * framesPerSecond
+    segmentCtx.timeline = {
+        available = true,
+        start_frame = 0.0,
+        end_frame = durationFrames,
+        duration_frames = durationFrames,
+        duration_seconds = duration,
+        progress = progress,
+    }
+    setTimelineContextMetatable(segmentCtx, {
+        __index = ctx,
+        __mt_derived_context = true,
+    })
+    return segmentCtx
+end
+
+---Creates a derived context whose time, frame, and timeline describe a
+---clamped local window within the source context.
+---@param ctx table
+---@param start number window start in source-context seconds
+---@param duration number positive window duration in seconds
+---@return table
+function mt.timeline.window_ctx(ctx, start, duration)
+    if type(ctx) ~= "table" or type(ctx.time) ~= "number" then
+        error("mt.timeline.window_ctx: ctx must contain a numeric time", 2)
+    end
+    if type(start) ~= "number"
+        or start ~= start
+        or start == math.huge
+        or start == -math.huge then
+        error("mt.timeline.window_ctx: start must be a finite number", 2)
+    end
+    if type(duration) ~= "number"
+        or duration ~= duration
+        or duration == math.huge
+        or duration == -math.huge
+        or duration <= 0.0 then
+        error("mt.timeline.window_ctx: duration must be a finite positive number", 2)
+    end
+
+    local localTime = mt.clamp(ctx.time - start, 0.0, duration)
+    return makeTimelineChainContext(ctx, localTime, duration)
+end
+
+---Evaluates a duration-based chain of pure functions at the current clip time.
+---Each completed evaluator is sampled at its logical end time, and its return
+---value is passed to the next evaluator as `previousValue`. A hold segment
+---preserves the previous value without calling a function. Exactly one segment
+---may use "remaining"; it absorbs the clip span left after fixed segments so
+---later segments, such as an outro, stay anchored to the clip end.
+---@param ctx table
+---@param initialValue any
+---@param segments MtTimelineChainSegment[]
+---@param options MtTimelineChainOptions|nil
+---@return any
+function mt.timeline.chain(ctx, initialValue, segments, options)
+    if type(ctx) ~= "table" or type(ctx.time) ~= "number" then
+        error("mt.timeline.chain: ctx must contain a numeric time", 2)
+    end
+    if type(segments) ~= "table" then
+        error("mt.timeline.chain: segments must be a table array", 2)
+    end
+    if options ~= nil and type(options) ~= "table" then
+        error("mt.timeline.chain: options must be a table", 2)
+    end
+
+    local fallbackDuration = options and options.fallback_duration or nil
+    if fallbackDuration ~= nil
+        and (type(fallbackDuration) ~= "number"
+            or fallbackDuration ~= fallbackDuration
+            or fallbackDuration == math.huge
+            or fallbackDuration == -math.huge
+            or fallbackDuration <= 0.0) then
+        error("mt.timeline.chain: fallback_duration must be a finite positive number", 2)
+    end
+
+    local clipDuration, elapsed = resolveTimelineSpan(ctx, fallbackDuration)
+    clipDuration = math.max(clipDuration, 0.0)
+
+    local normalizedSegments = {}
+    local fixedDuration = 0.0
+    local remainingSegmentFound = false
+    for index, segment in ipairs(segments) do
+        if type(segment) ~= "table" then
+            error("mt.timeline.chain: segment " .. index .. " must be a table", 2)
+        end
+
+        local durationSpecified = segment.duration ~= nil
+        local holdSpecified = segment.hold ~= nil
+        if durationSpecified == holdSpecified then
+            error("mt.timeline.chain: segment " .. index .. " must specify exactly one of duration or hold", 2)
+        end
+
+        local isHold = holdSpecified
+        local span = isHold and segment.hold or segment.duration
+        if isHold then
+            if segment.evaluate ~= nil then
+                error("mt.timeline.chain: hold segment " .. index .. " cannot specify evaluate", 2)
+            end
+        elseif type(segment.evaluate) ~= "function" then
+            error("mt.timeline.chain: duration segment " .. index .. " requires an evaluate function", 2)
+        end
+
+        local usesRemaining = span == "remaining"
+        if usesRemaining then
+            if remainingSegmentFound then
+                error("mt.timeline.chain: only one remaining segment is allowed", 2)
+            end
+            remainingSegmentFound = true
+        elseif type(span) ~= "number"
+            or span ~= span
+            or span == math.huge
+            or span == -math.huge
+            or span < 0.0 then
+            error("mt.timeline.chain: segment " .. index .. " span must be a finite non-negative number or 'remaining'", 2)
+        else
+            fixedDuration = fixedDuration + span
+        end
+
+        normalizedSegments[index] = {
+            is_hold = isHold,
+            uses_remaining = usesRemaining,
+            logical_duration = usesRemaining and 0.0 or span,
+            evaluate = segment.evaluate,
+        }
+    end
+
+    local fixedDurationScale = 1.0
+    if fixedDuration > clipDuration and fixedDuration > 0.0 then
+        fixedDurationScale = clipDuration / fixedDuration
+    end
+    local remainingDuration = math.max(clipDuration - fixedDuration, 0.0)
+
+    local currentValue = initialValue
+    local cursor = 0.0
+    local currentSegmentEvaluated = false
+    for _, segment in ipairs(normalizedSegments) do
+        if not currentSegmentEvaluated then
+            local allocatedDuration = remainingDuration
+            if not segment.uses_remaining then
+                allocatedDuration = segment.logical_duration * fixedDurationScale
+            end
+            local segmentEnd = cursor + allocatedDuration
+
+            if elapsed < segmentEnd then
+                if not segment.is_hold then
+                    local localTime = elapsed - cursor
+                    local logicalDuration = allocatedDuration
+                    if not segment.uses_remaining and allocatedDuration > 0.0 then
+                        localTime = segment.logical_duration * localTime / allocatedDuration
+                        logicalDuration = segment.logical_duration
+                    end
+                    local segmentCtx = makeTimelineChainContext(ctx, localTime, logicalDuration)
+                    currentValue = segment.evaluate(segmentCtx, currentValue)
+                end
+                currentSegmentEvaluated = true
+            elseif not segment.is_hold then
+                local endTime = segment.uses_remaining and allocatedDuration or segment.logical_duration
+                local segmentCtx = makeTimelineChainContext(ctx, endTime, endTime)
+                currentValue = segment.evaluate(segmentCtx, currentValue)
+            end
+            cursor = segmentEnd
+        end
+    end
+
+    return currentValue
 end
 
 ---Calculates the relative progress of intro and outro segments in [0, 1].
