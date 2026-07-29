@@ -54,11 +54,30 @@
     min-width: 0;
   }
   .app-bar-social-links {
-    margin-left: auto;
     display: flex;
     align-items: center;
     gap: 4px;
   }
+  /* Pushed to the right edge together with everything after it, so the title
+     keeps its place when the language names change width. */
+  .app-bar-language {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #999;
+  }
+  .app-bar-language > svg { flex: none; }
+  .app-bar-language select {
+    background: #3c3c3c;
+    color: #d4d4d4;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 11px;
+    font-family: inherit;
+  }
+  .app-bar-language select:hover { border-color: #777; }
   .app-bar-social-link {
     display: flex;
     align-items: center;
@@ -196,6 +215,26 @@
   .log-panel-line { color: #d4d4d4; padding: 1px 0; }
   .log-panel-line.log-warn { color: #cca700; }
   .log-panel-line.log-error { color: #f14c4c; }
+  .log-panel-source-link {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-all;
+    cursor: pointer;
+  }
+  .log-panel-source-link:hover {
+    background: color-mix(in srgb, var(--mt-accent) 14%, transparent);
+    text-decoration: underline;
+  }
+  .log-panel-source-link:focus-visible {
+    outline: 1px solid var(--mt-accent);
+    outline-offset: -1px;
+  }
   #lua-editor.drag-over::after {
     content: "Drop .lua or .webm file to load";
     position: absolute;
@@ -485,8 +524,16 @@
       aria-haspopup="true"
       aria-expanded="false"
       aria-label="Menu"
+      data-i18n-aria-label="menu.label"
     >☰</button>
     <span class="app-bar-title">Mug Typography Simulator (MT Sim)</span>
+    <div class="app-bar-language">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 6h-2.95a15.7 15.7 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.9 8zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14A7.9 7.9 0 0 1 4 12c0-.69.1-1.36.26-2h3.38a16.5 16.5 0 0 0 0 4H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56A7.99 7.99 0 0 1 5.08 16zm2.95-8H5.08a7.99 7.99 0 0 1 4.33-3.56A15.7 15.7 0 0 0 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66a14.7 14.7 0 0 1 0-4h4.68a14.7 14.7 0 0 1 0 4zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56zM16.36 14a16.5 16.5 0 0 0 0-4h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/></svg>
+      <select id="language-select" data-i18n-aria-label="language.label" aria-label="Language">
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+      </select>
+    </div>
     <div class="app-bar-social-links">
       <a href="https://x.com/MugLab3" target="_blank" rel="noopener" class="app-bar-social-link" aria-label="X (Twitter)">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
@@ -512,65 +559,73 @@
        and they render identically on every platform. Each is 16x16 on a
        24x24 viewBox, matching the app bar's social links. -->
   <div class="app-menu" id="app-menu" role="menu">
-    <button id="open-sample-browser-button" type="button" role="menuitem">
+    <button id="open-sample-browser-button" type="button" role="menuitem" data-i18n="menu.browseSamples">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M4 5h6v6H4V5zm0 8h6v6H4v-6zm8-8h8v2h-8V5zm0 4h8v2h-8V9zm0 6h8v2h-8v-2zm0 4h8v2h-8v-2z"/></svg>
-      Browse Samples…
+      <span data-i18n-text>Browse Samples…</span>
     </button>
-    <button id="open-scripting-check-button" type="button" role="menuitem">
+    <button id="open-scripting-check-button" type="button" role="menuitem" data-i18n="menu.scriptingCheck">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>
-      Scripting Check…
+      <span data-i18n-text>Scripting Check…</span>
     </button>
-    <button id="open-gallery-repo-button" type="button" role="menuitem">
+    <button id="open-gallery-repo-button" type="button" role="menuitem" data-i18n="menu.submitToGallery">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.09 3.29 9.4 7.86 10.93.57.1.78-.25.78-.55 0-.27-.01-1.16-.02-2.11-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 2.87-.39c.97 0 1.95.13 2.87.39 2.18-1.49 3.14-1.18 3.14-1.18.63 1.58.24 2.75.12 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .3.2.66.79.55A10.99 10.99 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5z"/></svg>
-      Submit to Gallery
+      <span data-i18n-text>Submit to Gallery</span>
       <svg class="app-menu-external" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h6V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6h-2v6z"/></svg>
     </button>
     <div class="app-menu-divider"></div>
-    <button id="copy-script-button" type="button" role="menuitem">
+    <button id="copy-script-button" type="button" role="menuitem" data-i18n="menu.copyScript">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
-      Copy Script
+      <span data-i18n-text>Copy Script</span>
     </button>
-    <button id="paste-script-button" type="button" role="menuitem">
+    <button id="paste-script-button" type="button" role="menuitem" data-i18n="menu.pasteScript">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 18H5V4h2v3h10V4h2v16z"/></svg>
-      Paste Script
+      <span data-i18n-text>Paste Script</span>
     </button>
     <div class="app-menu-divider"></div>
-    <button id="new-script-button" type="button" role="menuitem">
+    <button id="new-script-button" type="button" role="menuitem" data-i18n="menu.newScript">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-5-8h-2v3H8v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
-      New Script
+      <span data-i18n-text>New Script</span>
     </button>
-    <button id="save-file-button" type="button" role="menuitem">
+    <button id="save-file-button" type="button" role="menuitem" data-i18n="menu.saveScript">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/></svg>
-      Save Script
+      <span data-i18n-text>Save Script</span>
     </button>
-    <button id="load-file-button" type="button" role="menuitem">
+    <button id="load-file-button" type="button" role="menuitem" data-i18n="menu.loadScript">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
-      Load Script
+      <span data-i18n-text>Load Script</span>
     </button>
     <input type="file" id="load-file-input" accept=".lua,text/x-lua,.webm,video/webm" style="display: none">
-    <button id="export-webm-button" type="button" role="menuitem">
+    <button id="export-webm-button" type="button" role="menuitem" data-i18n="menu.exportWebm">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-      Export WebM
+      <span data-i18n-text>Export WebM</span>
     </button>
     <div class="app-menu-divider"></div>
-    <button id="open-manual-button" type="button" role="menuitem">
+    <button id="open-manual-button" type="button" role="menuitem" data-i18n="menu.manual">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM8 6h5v2H8V6zm0 4h8v2H8v-2zm0 4h8v2H8v-2z"/></svg>
-      Manual
+      <span data-i18n-text>Manual</span>
       <svg class="app-menu-external" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h6V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6h-2v6z"/></svg>
     </button>
-    <button id="open-docs-button" type="button" role="menuitem">
+    <button id="open-docs-button" type="button" role="menuitem" data-i18n="menu.apiReference">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
-      API Reference
+      <span data-i18n-text>API Reference</span>
       <svg class="app-menu-external" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h6V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6h-2v6z"/></svg>
     </button>
-    <button id="open-licenses-button" type="button" role="menuitem">
+    <button id="download-ai-reference-button" type="button" role="menuitem" data-i18n="menu.downloadAiReference">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3zM4 19h16v2H4v-2z"/></svg>
+      <span data-i18n-text>Download AI API Reference</span>
+    </button>
+    <button id="copy-ai-reference-button" type="button" role="menuitem" data-i18n="menu.copyAiReference">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+      <span data-i18n-text>Copy AI API Reference</span>
+    </button>
+    <button id="open-licenses-button" type="button" role="menuitem" data-i18n="menu.thirdPartyNotices">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-      Third-Party Notices
+      <span data-i18n-text>Third-Party Notices</span>
     </button>
     <div class="app-menu-divider"></div>
-    <button id="clear-local-data-button" type="button" role="menuitem" class="app-menu-destructive">
+    <button id="clear-local-data-button" type="button" role="menuitem" class="app-menu-destructive" data-i18n="menu.clearLocalData">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-      Clear Local Data
+      <span data-i18n-text>Clear Local Data</span>
     </button>
   </div>
   <div class="web-shell" id="web-shell">
@@ -578,8 +633,8 @@
       <div id="lua-editor"></div>
       <div class="log-panel" id="log-panel">
         <div class="log-panel-header">
-          <span>Log</span>
-          <button id="log-panel-clear" class="log-panel-clear" type="button">Clear</button>
+          <span data-i18n="log.title">Log</span>
+          <button id="log-panel-clear" class="log-panel-clear" type="button" data-i18n="log.clear">Clear</button>
         </div>
         <div class="log-panel-body" id="log-panel-body"></div>
       </div>
@@ -596,7 +651,7 @@
 >
   <div class="scripting-check-panel">
     <div class="doc-viewer-header">
-      <strong id="scripting-check-title">Scripting Check</strong>
+      <strong id="scripting-check-title" data-i18n="overlay.scriptingCheck">Scripting Check</strong>
       <button id="close-scripting-check-button" class="overlay-close-button" type="button" aria-label="Close" title="Close">✕</button>
     </div>
     <div class="scripting-check-status" id="scripting-check-status"></div>
@@ -606,7 +661,7 @@
 <div class="doc-viewer-overlay" id="sample-browser-overlay">
   <div class="sample-browser-panel">
     <div class="sample-browser-header">
-      <strong>Browse Samples</strong>
+      <strong data-i18n="overlay.browseSamples">Browse Samples</strong>
       <button id="close-sample-browser-button" class="overlay-close-button" type="button" aria-label="Close" title="Close">✕</button>
     </div>
     <div class="sample-browser-controls">
@@ -625,7 +680,7 @@
 <div class="doc-viewer-overlay" id="licenses-viewer-overlay">
   <div class="doc-viewer-panel">
     <div class="doc-viewer-header">
-      <strong>Third-Party Notices</strong>
+      <strong data-i18n="overlay.thirdPartyNotices">Third-Party Notices</strong>
       <button id="close-licenses-button" class="overlay-close-button" type="button" aria-label="Close" title="Close">✕</button>
     </div>
     <div class="doc-viewer-body" id="licenses-viewer-body"></div>

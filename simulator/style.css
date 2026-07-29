@@ -132,55 +132,179 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
 }
 
 .toolbar {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  flex: none;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
+  background: var(--vscode-editorGroupHeader-tabsBackground, #252526);
 }
 
-.toolbar select,
-.toolbar input,
-.toolbar button {
+.toolbar-control-group {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+}
+
+.toolbar-viewport-controls {
+  min-width: 0;
+}
+
+.toolbar-actions {
+  margin-left: 2px;
+}
+
+.toolbar button,
+.toolbar input {
+  box-sizing: border-box;
   background: var(--vscode-dropdown-background, #3c3c3c);
   color: var(--vscode-dropdown-foreground, #ccc);
   border: 1px solid var(--vscode-dropdown-border, #555);
-  border-radius: 3px;
-  padding: 2px 6px;
+  border-radius: 5px;
   font-size: 12px;
-  max-width: 220px;
+  outline: none;
 }
 
 .toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+}
+
+.toolbar button:hover {
+  color: var(--vscode-foreground, #fff);
+  background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+}
+
+.toolbar button:focus-visible,
+.toolbar input:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: 1px;
+}
+
+.toolbar button svg {
+  display: block;
+  flex: none;
+  pointer-events: none;
+}
+
+.toolbar-icon-button {
+  width: 30px;
+  height: 28px;
+  padding: 5px;
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+.toolbar-icon-button:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1)) !important;
+}
+
+.toolbar-segment {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px;
+  border: 1px solid var(--vscode-dropdown-border, #555);
+  border-radius: 6px;
+  background: var(--vscode-dropdown-background, #3c3c3c);
+}
+
+.toolbar-segment .toolbar-mode-button {
+  width: 28px;
+  height: 24px;
+  padding: 4px;
+  border: 0 !important;
+  border-radius: 4px;
+}
+
+.toolbar-segment .toolbar-mode-button.active {
+  color: var(--mt-accent);
+  background: color-mix(in srgb, var(--mt-accent) 14%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mt-accent) 38%, transparent);
+}
+
+.toolbar-leading-control {
+  flex: none;
+  min-width: 50px;
+  height: 28px;
+  padding: 2px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-part-count {
+  width: 44px;
+  height: 28px;
+  padding: 2px 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-copy-script-button.copy-succeeded {
   color: var(--mt-accent);
-  background: color-mix(in srgb, var(--mt-accent) 18%, var(--vscode-dropdown-background));
-  border-color: var(--mt-accent);
+  background: color-mix(in srgb, var(--mt-accent) 18%, var(--vscode-dropdown-background)) !important;
+  border-color: var(--mt-accent) !important;
 }
 
 .toolbar-copy-script-button.copy-failed {
   color: var(--vscode-errorForeground);
-  border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
-}
-
-.toolbar input[type="number"] {
-  width: 56px;
+  background: color-mix(in srgb, var(--vscode-errorForeground) 12%, transparent) !important;
+  border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground)) !important;
 }
 
 .topology-status {
-  min-width: 15ch;
   margin-left: auto;
+  overflow: hidden;
   color: var(--vscode-descriptionForeground, #aaa);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.toolbar-reset-ui-button {
-  margin-left: 8px;
+.toolbar-overflow {
+  position: relative;
+}
+
+.toolbar-overflow-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 300;
+  display: flex;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, #555));
+  border-radius: 6px;
+  background: var(--vscode-menu-background, #252526);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.toolbar-overflow-menu[hidden] {
+  display: none;
+}
+
+.toolbar .toolbar-menu-item {
+  width: 100%;
+  min-height: 30px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 5px 8px;
+  color: var(--vscode-menu-foreground, var(--vscode-foreground, #ccc));
+  border-color: transparent;
+  background: transparent;
+  white-space: nowrap;
+}
+
+.toolbar .toolbar-menu-item:hover {
+  color: var(--vscode-menu-selectionForeground, #fff);
+  background: var(--vscode-menu-selectionBackground, #04395e);
 }
 
 .preview-area {
@@ -1048,16 +1172,33 @@ body.is-dragging-horizontal {
    is moving backwards. Give the playhead a stable row of its own. */
 @container mt-sim-app (max-width: 520px) {
   .toolbar {
-    flex-wrap: wrap;
-    gap: 6px;
+    gap: 3px;
+    padding-inline: 5px;
   }
 
-  .toolbar-reset-ui-button {
-    margin-left: 0;
+  .toolbar-control-group {
+    gap: 3px;
   }
 
   .topology-status {
-    flex: 1 0 15ch;
+    display: none;
+  }
+
+  .toolbar-icon-button {
+    width: 27px;
+  }
+
+  .toolbar-segment .toolbar-mode-button {
+    width: 25px;
+  }
+
+  .toolbar-leading-control {
+    min-width: 45px;
+    padding-inline: 4px;
+  }
+
+  .toolbar-part-count {
+    width: 38px;
   }
 
   .timeline {

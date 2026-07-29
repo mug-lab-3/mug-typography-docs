@@ -130,15 +130,21 @@ ON AN "AS IS" BASIS, AND THE COPYRIGHT HOLDER HAS NO OBLIGATION TO
 PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 ```
 
-## Google Material Icons sample path (Apache License 2.0)
+## Google Material Icons (Apache License 2.0)
 
-The bundled `34_mt_svg_path.lua` reference sample contains an adapted
-`rocket_launch` path from Google Material Icons:
-https://github.com/google/material-design-icons
+The simulator UI contains inline SVG paths adapted from Google Material
+Icons. These include camera, check/done, copy/content-copy,
+paste/content-paste, save, folder, video-camera, code, download, info,
+delete, open-in-new, and more-horizontal designs. The paths have been
+modified for the simulator's sizing and visual language.
+
+The bundled `34_mt_svg_path.lua` reference sample also contains an adapted
+`rocket_launch` path.
+
+Source: https://github.com/google/material-design-icons
 
 Copyright Google LLC. Licensed under the Apache License, Version 2.0.
-You may obtain a copy of the License at:
-https://www.apache.org/licenses/LICENSE-2.0
+A copy of the license is distributed in `licenses/Apache-2.0.txt`.
 
 ## monaco-editor (MIT)
 
