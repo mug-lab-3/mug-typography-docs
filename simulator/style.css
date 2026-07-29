@@ -343,16 +343,17 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
 
 .inspector {
   /* Sash drags equate getBoundingClientRect() with style.height; border-box
-     keeps the panel's border and padding inside that equation. */
+     keeps the panel's border inside that equation. */
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   width: 280px;
-  overflow-y: auto;
-  padding: 0 8px 8px;
+  overflow: hidden;
   border-left: 1px solid var(--vscode-panel-border, #444);
   background: var(--vscode-sideBar-background, #252526);
 }
 
-.inspector,
+.inspector-sections,
 .output-values-table-host {
   scrollbar-width: thin;
   scrollbar-color:
@@ -360,20 +361,20 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
     transparent;
 }
 
-.inspector::-webkit-scrollbar,
+.inspector-sections::-webkit-scrollbar,
 .output-values-table-host::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-.inspector::-webkit-scrollbar-track,
+.inspector-sections::-webkit-scrollbar-track,
 .output-values-table-host::-webkit-scrollbar-track,
-.inspector::-webkit-scrollbar-corner,
+.inspector-sections::-webkit-scrollbar-corner,
 .output-values-table-host::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-.inspector::-webkit-scrollbar-thumb,
+.inspector-sections::-webkit-scrollbar-thumb,
 .output-values-table-host::-webkit-scrollbar-thumb {
   min-width: 28px;
   min-height: 28px;
@@ -384,14 +385,14 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
     content-box;
 }
 
-.inspector::-webkit-scrollbar-thumb:hover,
+.inspector-sections::-webkit-scrollbar-thumb:hover,
 .output-values-table-host::-webkit-scrollbar-thumb:hover {
   background:
     var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7))
     content-box;
 }
 
-.inspector::-webkit-scrollbar-thumb:active,
+.inspector-sections::-webkit-scrollbar-thumb:active,
 .output-values-table-host::-webkit-scrollbar-thumb:active {
   background:
     var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4))
@@ -399,13 +400,12 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
 }
 
 .inspector-header {
-  position: sticky;
-  z-index: 3;
-  top: 0;
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   min-height: 32px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--vscode-panel-border, #444);
   background: color-mix(
     in srgb,
@@ -468,9 +468,7 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
 }
 
 .inspector-tabs {
-  position: sticky;
-  z-index: 3;
-  top: 32px;
+  flex: none;
   background: var(--vscode-sideBar-background, #252526);
 }
 
@@ -478,9 +476,15 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
   flex: 1;
 }
 
-.inspector details {
+.inspector-sections {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.inspector-sections details {
   border-bottom: 1px solid var(--vscode-panel-border, #444);
-  padding: 7px 0;
+  padding: 7px 8px;
 }
 
 .inspector summary {
@@ -1127,7 +1131,7 @@ body.is-dragging-horizontal {
     height: 32px !important;
     min-height: 32px !important;
     max-height: 32px !important;
-    padding: 0 8px !important;
+    padding: 0 !important;
     overflow: hidden !important;
     border-bottom: none !important;
   }
