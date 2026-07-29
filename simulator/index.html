@@ -158,6 +158,32 @@
     min-height: 0;
   }
   #lua-editor { width: 100%; height: 100%; min-height: 0; position: relative; }
+  .initial-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    color: #999;
+    background: #1e1e1e;
+    font-size: 12px;
+  }
+  .initial-loading::before {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #555;
+    border-top-color: var(--mt-accent, #a855f7);
+    border-radius: 50%;
+    content: "";
+    animation: initial-loading-spin 0.8s linear infinite;
+  }
+  @keyframes initial-loading-spin {
+    to { transform: rotate(360deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .initial-loading::before { animation: none; }
+  }
   .log-panel {
     display: flex;
     flex-direction: column;
@@ -630,7 +656,9 @@
   </div>
   <div class="web-shell" id="web-shell">
     <div class="web-editor-pane" id="web-editor-pane">
-      <div id="lua-editor"></div>
+      <div id="lua-editor">
+        <div class="initial-loading" role="status" data-i18n="loading.editor">Loading editor…</div>
+      </div>
       <div class="log-panel" id="log-panel">
         <div class="log-panel-header">
           <span data-i18n="log.title">Log</span>
@@ -639,7 +667,9 @@
         <div class="log-panel-body" id="log-panel-body"></div>
       </div>
     </div>
-    <div id="app"></div>
+    <div id="app">
+      <div class="initial-loading" role="status" data-i18n="loading.simulator">Loading simulator…</div>
+    </div>
   </div>
 </div>
 <div
@@ -686,6 +716,6 @@
     <div class="doc-viewer-body" id="licenses-viewer-body"></div>
   </div>
 </div>
-<script src="web-main.js"></script>
+<script type="module" src="web-main.js"></script>
 </body>
 </html>
