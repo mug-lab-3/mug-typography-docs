@@ -96,16 +96,18 @@ function mt.remap(value, inLow, inHigh, outLow, outHigh, clamped)
     return outLow + (outHigh - outLow) * t
 end
 
----Wrap value into the half-open range [low, high).
+---Wrap value into the half-open range between two boundaries.
 ---@param value number
----@param low number
----@param high number
+---@param boundaryA number
+---@param boundaryB number
 ---@return number
-function mt.wrap(value, low, high)
-    local result = low
-    local range = high - low
+function mt.wrap(value, boundaryA, boundaryB)
+    local lowerBoundary = math.min(boundaryA, boundaryB)
+    local upperBoundary = math.max(boundaryA, boundaryB)
+    local result = lowerBoundary
+    local range = upperBoundary - lowerBoundary
     if range > 0.0 then
-        result = low + (value - low) % range
+        result = lowerBoundary + (value - lowerBoundary) % range
     end
     return result
 end
@@ -217,6 +219,39 @@ function mt.stagger(time, index, delay, duration)
     return mt.clamp((time - delay * (index - 1)) / duration, 0.0, 1.0)
 end
 
+---Applies a normalized start-time spread to an existing progress value.
+---`position` selects the start within the leading `span` of the shared
+---window, while every position still reaches 1 when `progress` reaches 1.
+---@param progress number
+---@param position number
+---@param span number
+---@return number
+function mt.stagger_progress(progress, position, span)
+    if type(progress) ~= "number"
+        or progress ~= progress
+        or progress == math.huge
+        or progress == -math.huge then
+        error("mt.stagger_progress: progress must be a finite number", 2)
+    end
+    if type(position) ~= "number"
+        or position ~= position
+        or position == math.huge
+        or position == -math.huge then
+        error("mt.stagger_progress: position must be a finite number", 2)
+    end
+    if type(span) ~= "number"
+        or span ~= span
+        or span == math.huge
+        or span == -math.huge
+        or span < 0.0
+        or span >= 1.0 then
+        error("mt.stagger_progress: span must be a finite number in [0, 1)", 2)
+    end
+
+    local normalizedPosition = mt.saturate(position)
+    return mt.saturate((progress - normalizedPosition * span) / (1.0 - span))
+end
+
 ---@class MtKeyframe
 ---@field t number keyframe time; keys must be listed in ascending t order
 ---@field v number|MtColor keyframe value (numbers and RGBA color tables can not be mixed in one list)
@@ -288,19 +323,41 @@ local function mixInteger32(value)
 end
 
 local kGoldenRatio32 = 0x9e3779b9
+local kFnvOffsetBasis32 = 0x811c9dc5
+local kFnvPrime32 = 0x01000193
+
+---Hash a string's UTF-8 bytes into a well-distributed 32-bit salt.
+---@param value string
+---@return integer
+local function hashString32(value)
+    local hash = kFnvOffsetBasis32
+    for byteIndex = 1, #value do
+        hash = ((hash ~ string.byte(value, byteIndex)) * kFnvPrime32) & 0xffffffff
+    end
+    return mixInteger32(hash)
+end
 
 ---Order-independent random in [0, 1): the value depends only on
----(seed, index), never on call order. Use this instead of math.random when a
+---(seed, index, channel), never on call order. Use this instead of math.random when a
 ---per-character / per-part stable random is needed: math.random depends on
 ---call order, which breaks determinism across render orders.
 ---@param seed integer
 ---@param index integer
+---@param channel string|nil independent named random channel
 ---@return number
-function mt.random(seed, index)
+function mt.random(seed, index, channel)
+    if channel ~= nil and type(channel) ~= "string" then
+        error("mt.random: channel must be a string", 2)
+    end
+
     local seedInteger = math.tointeger(seed) or 0
     local indexInteger = math.tointeger(index) or 0
-    local mixed = mixInteger32(mixInteger32(seedInteger) ~
-        (indexInteger * kGoldenRatio32 & 0xffffffff))
+    local mixedInput = mixInteger32(seedInteger) ~
+        (indexInteger * kGoldenRatio32 & 0xffffffff)
+    if channel ~= nil then
+        mixedInput = mixedInput ~ hashString32(channel)
+    end
+    local mixed = mixInteger32(mixedInput)
     return mixed / 4294967296.0
 end
 
@@ -309,9 +366,10 @@ end
 ---@param index integer
 ---@param low number
 ---@param high number
+---@param channel string|nil independent named random channel
 ---@return number
-function mt.random_range(seed, index, low, high)
-    return mt.lerp(low, high, mt.random(seed, index))
+function mt.random_range(seed, index, low, high, channel)
+    return mt.lerp(low, high, mt.random(seed, index, channel))
 end
 
 ---@param value number
@@ -362,6 +420,62 @@ end
 
 ---@class MtColorUtilities
 mt.color = {}
+
+---Resolve the fill inherited by a character or part.
+---For a character, descendant part overrides are not included.
+---@param ctx table OnLayout or OnPath context
+---@param target table character or part from ctx
+---@return MtColor color resolved solid color or gradient start color
+---@return string mode 'solid'|'gradient'|'crayon'|'transparent'
+---@return number opacity resolved object opacity in [0, 1]
+function mt.color.resolve_fill(ctx, target)
+    assert(ctx and ctx.global and ctx.chars and ctx.parts,
+        "resolve_fill requires an OnLayout or OnPath context")
+    assert(type(target) == "table" and type(target.index) == "number",
+        "resolve_fill target must be a character or part from ctx")
+
+    local character = ctx.chars[target.index]
+    local part = nil
+    if character ~= target then
+        part = ctx.parts[target.index]
+        assert(part == target,
+            "resolve_fill target must be a character or part from ctx")
+        character = ctx.chars[part.character_index]
+    end
+    assert(character ~= nil,
+        "resolve_fill target must have an owning character in ctx")
+
+    local color = ctx.global.fill.color
+    local usesIndividualColor = false
+    if character.fill.use then
+        color = character.fill.color
+        usesIndividualColor = true
+    end
+    if part ~= nil and part.fill.use then
+        color = part.fill.color
+        usesIndividualColor = true
+    end
+
+    local mode = "solid"
+    if not usesIndividualColor then
+        if ctx.global.fill.transparent then
+            mode = "transparent"
+        elseif ctx.global.gradient.color_space == "crayon" then
+            mode = "crayon"
+        elseif ctx.global.gradient.color_space ~= "none" then
+            mode = "gradient"
+        end
+    end
+
+    local opacity = ctx.global.opacity * character.opacity
+    if part ~= nil then
+        opacity = opacity * part.opacity
+    end
+
+    return { r = color.r, g = color.g, b = color.b, a = color.a },
+        mode,
+        mt.saturate(opacity)
+end
 
 ---Interpolate two RGBA color tables.
 ---@param from MtColor
@@ -537,7 +651,52 @@ function mt.wave_sawtooth(t, frequency, phase)
     return normalizedTime * 2.0 - 1.0
 end
 
+-- Shuffled rank lookups, memoised per (seed, count).
+--
+-- Drawing an independent random per index leaves clusters and gaps: with n
+-- independent samples the spacing is exponential, so several items end up
+-- nearly simultaneous while whole stretches stay empty. A permutation keeps
+-- every rank exactly one apart, which is what a randomised order is expected
+-- to look like. stagger_pattern is called once per index, so the permutation
+-- is cached to keep the whole sweep linear.
+local shuffledRankCache = {}
+local shuffledRankCacheEntries = 0
+local kShuffledRankCacheLimit = 64
+
+---Deterministic permutation of 1..count, stable for a given (seed, count).
+---@param seed integer
+---@param count integer
+---@return integer[]
+local function shuffledRanks(seed, count)
+    local cacheKey = seed .. ":" .. count
+    local ranks = shuffledRankCache[cacheKey]
+    if ranks == nil then
+        ranks = {}
+        for ordinal = 1, count do
+            ranks[ordinal] = ordinal
+        end
+        -- Fisher-Yates driven by the stateless hash random, so the result
+        -- depends only on the seed and never on call order.
+        for ordinal = count, 2, -1 do
+            local pick = math.floor(mt.random(seed, ordinal) * ordinal) + 1
+            if pick > ordinal then
+                pick = ordinal
+            end
+            ranks[ordinal], ranks[pick] = ranks[pick], ranks[ordinal]
+        end
+        if shuffledRankCacheEntries >= kShuffledRankCacheLimit then
+            shuffledRankCache = {}
+            shuffledRankCacheEntries = 0
+        end
+        shuffledRankCache[cacheKey] = ranks
+        shuffledRankCacheEntries = shuffledRankCacheEntries + 1
+    end
+    return ranks
+end
+
 ---Per-index staggered progress with configurable directional patterns.
+---'random' assigns a shuffled rank, so the delays stay evenly spaced instead
+---of clustering the way independent per-index randoms do.
 ---@param time number
 ---@param index integer
 ---@param count integer
@@ -555,7 +714,9 @@ function mt.stagger_pattern(time, index, count, pattern, delay, duration, seed)
         effectiveIndex = math.abs(index - center) + 1
     elseif pattern == "random" then
         local randSeed = seed or 42
-        effectiveIndex = mt.random(randSeed, index) * (count - 1) + 1
+        if index >= 1 and index <= count then
+            effectiveIndex = shuffledRanks(randSeed, count)[index]
+        end
     end
     return mt.clamp((time - delay * (effectiveIndex - 1)) / duration, 0.0, 1.0)
 end
@@ -698,16 +859,16 @@ end
 ---continuous Squash & Stretch and ground pinning offset calculation.
 ---Supports both table configuration and positional arguments.
 ---@param paramsOrT table|number configuration table or time t
-----@param groundY number|nil ground Y Canvas coordinate
-----@param startY number|nil start Y Canvas coordinate
-----@param gravity number|nil downward gravity magnitude
-----@param restitution number|nil restitution coefficient in [0, 1)
-----@param startVelocity number|nil initial upward velocity
-----@param squashStrength number|nil impact squash strength coefficient
-----@param stretchStrength number|nil in-air velocity stretch coefficient
-----@param flexibility number|nil recovery oscillation frequency (rad/s)
-----@param damping number|nil recovery damping rate
-----@return table|number result object (if table input) or y (if positional input)
+---@param groundY number|nil ground Y Canvas coordinate
+---@param startY number|nil start Y Canvas coordinate
+---@param gravity number|nil downward gravity magnitude
+---@param restitution number|nil restitution coefficient in [0, 1)
+---@param startVelocity number|nil initial upward velocity
+---@param squashStrength number|nil impact squash strength coefficient
+---@param stretchStrength number|nil in-air velocity stretch coefficient
+---@param flexibility number|nil recovery oscillation frequency (rad/s)
+---@param damping number|nil recovery damping rate
+---@return table|number result object (if table input) or y (if positional input)
 function mt.bounce_y(paramsOrT, groundY, startY, gravity, restitution, startVelocity, squashStrength, stretchStrength, flexibility, damping)
     local t, gY, sY, g, rest, v0
     local sqStr, stStr, flex, damp
@@ -768,16 +929,16 @@ end
 ---continuous Squash & Stretch and wall pinning offset calculation.
 ---Supports both table configuration and positional arguments.
 ---@param paramsOrT table|number configuration table or time t
-----@param wallX number|nil wall X Canvas coordinate
-----@param startX number|nil start X Canvas coordinate
-----@param acceleration number|nil acceleration magnitude towards wall
-----@param restitution number|nil restitution coefficient in [0, 1)
-----@param startVelocity number|nil initial X velocity
-----@param squashStrength number|nil impact squash strength coefficient
-----@param stretchStrength number|nil in-air velocity stretch coefficient
-----@param flexibility number|nil recovery oscillation frequency (rad/s)
-----@param damping number|nil recovery damping rate
-----@return table|number result object (if table input) or x (if positional input)
+---@param wallX number|nil wall X Canvas coordinate
+---@param startX number|nil start X Canvas coordinate
+---@param acceleration number|nil acceleration magnitude towards wall
+---@param restitution number|nil restitution coefficient in [0, 1)
+---@param startVelocity number|nil initial X velocity
+---@param squashStrength number|nil impact squash strength coefficient
+---@param stretchStrength number|nil in-air velocity stretch coefficient
+---@param flexibility number|nil recovery oscillation frequency (rad/s)
+---@param damping number|nil recovery damping rate
+---@return table|number result object (if table input) or x (if positional input)
 function mt.bounce_x(paramsOrT, wallX, startX, acceleration, restitution, startVelocity, squashStrength, stretchStrength, flexibility, damping)
     local t, wX, sX, accel, rest, v0
     local sqStr, stStr, flex, damp
@@ -1098,6 +1259,189 @@ local function layoutSetCharacterPoint(ctx, character, naturalX, naturalY, targe
     local currentX, currentY = layoutMapPoint(layoutCharacterMatrix(ctx, character), pointX, pointY)
     character.offset_x = character.offset_x + (targetPixelX - currentX) / ctx.canvas.width
     character.offset_y = character.offset_y - (targetPixelY - currentY) / ctx.canvas.height
+end
+
+---------------------------------------------------------------------------
+-- Filtered iteration over shaped characters and parts
+---------------------------------------------------------------------------
+
+---Collects the indices that pass the option filters, in host order.
+---@param ctx table
+---@param options table already defaulted by eachIterator
+---@param isPart boolean
+---@return integer[]
+local function eachCollectIndices(ctx, options, isPart)
+    local container = isPart and ctx.parts or ctx.chars
+    local containerCount = isPart and ctx.part_count or ctx.char_count
+    local firstIndex = math.max(math.floor(options.from or 1), 1)
+    local lastIndex = math.min(math.floor(options.to or containerCount), containerCount)
+    local lineFilter = options.line
+    local firstCharFilter = options.from_char
+    local lastCharFilter = options.to_char
+
+    local selected = {}
+    for index = firstIndex, lastIndex do
+        local item = container[index]
+        local accepted = true
+        if lineFilter ~= nil and item.line_index ~= lineFilter then
+            accepted = false
+        end
+        if accepted and isPart and (firstCharFilter ~= nil or lastCharFilter ~= nil) then
+            local characterIndex = item.character_index
+            if firstCharFilter ~= nil and characterIndex < firstCharFilter then
+                accepted = false
+            elseif lastCharFilter ~= nil and characterIndex > lastCharFilter then
+                accepted = false
+            end
+        end
+        if accepted then
+            selected[#selected + 1] = index
+        end
+    end
+    return selected
+end
+
+---Builds the rank lookup used to map an ordinal onto a progress value.
+---Only the 'random' pattern needs a materialised table; the closed-form
+---patterns are resolved per element by eachProgressAt.
+---@param pattern string
+---@param count integer
+---@param seed integer|nil
+---@return integer[]|nil
+local function eachRandomRanks(pattern, count, seed)
+    local ranks = nil
+    if pattern == "random" then
+        ranks = shuffledRanks(seed or 0, count)
+    end
+    return ranks
+end
+
+---Normalised position of one ordinal under the requested order pattern.
+---@param pattern string
+---@param ordinal integer
+---@param count integer
+---@param ranks number[]|nil non-nil whenever pattern is 'random'
+---@return number
+local function eachProgressAt(pattern, ordinal, count, ranks)
+    local result = 0.0
+    if pattern == "desc" then
+        result = mt.distribute(count - ordinal + 1, count)
+    elseif pattern == "center" then
+        -- Distance from the midpoint, normalised so the outermost element
+        -- always reaches 1.0 for both odd and even counts.
+        local center = (count + 1) / 2.0
+        local maximumDistance = center - 1.0
+        if maximumDistance > 0.0 then
+            result = mt.saturate(math.abs(ordinal - center) / maximumDistance)
+        end
+    elseif pattern == "random" and ranks ~= nil then
+        result = mt.distribute(ranks[ordinal], count)
+    else
+        result = mt.distribute(ordinal, count)
+    end
+    return result
+end
+
+---@class MtEachInfo
+---@field progress number normalised position in [0, 1] following the order pattern
+---@field n integer one-based counter within the filtered set
+---@field count integer number of elements in the filtered set (at least 1)
+---@field first boolean true on the first iteration
+---@field last boolean true on the last iteration
+---@field char table|nil each_part only: the character owning this part
+---@field char_index integer|nil each_part only: index of the owning character
+---@field index_in_char integer|nil each_part only: position within the owning character
+
+---Shared iterator factory behind mt.each_char and mt.each_part.
+---@param ctx table
+---@param options table|nil
+---@param isPart boolean
+---@return function
+local function eachIterator(ctx, options, isPart)
+    local resolvedOptions = options or {}
+    local container = isPart and ctx.parts or ctx.chars
+    local selected = eachCollectIndices(ctx, resolvedOptions, isPart)
+    local selectedCount = #selected
+    local pattern = resolvedOptions.order or "asc"
+    local ranks = eachRandomRanks(pattern, selectedCount, resolvedOptions.seed)
+
+    -- One info table is reused across the whole loop: callers that need to
+    -- keep values beyond the current iteration must copy them out. It is only
+    -- ever handed out alongside an element, so count is always at least 1 by
+    -- the time a caller can read it.
+    local info = {
+        progress = 0.0,
+        n = 0,
+        count = selectedCount,
+        first = false,
+        last = false,
+    }
+
+    local ordinal = 0
+    return function()
+        ordinal = ordinal + 1
+        local index = selected[ordinal]
+        local resultIndex = nil
+        local resultItem = nil
+        local resultInfo = nil
+        if index ~= nil then
+            local item = container[index]
+            info.progress = eachProgressAt(pattern, ordinal, selectedCount, ranks)
+            info.n = ordinal
+            info.first = ordinal == 1
+            info.last = ordinal == selectedCount
+            if isPart then
+                local characterIndex = item.character_index
+                info.char_index = characterIndex
+                info.char = ctx.chars[characterIndex]
+                info.index_in_char = item.index_in_character
+            end
+            resultIndex = index
+            resultItem = item
+            resultInfo = info
+        end
+        return resultIndex, resultItem, resultInfo
+    end
+end
+
+---@class MtEachCharOptions
+---@field from number|nil first character index to visit, floored (default 1)
+---@field to number|nil last character index to visit, floored (default ctx.char_count)
+---@field line number|nil restrict to characters on this line_index
+---@field order string|nil 'asc'|'desc'|'center'|'random', drives info.progress
+---@field seed integer|nil seed for the 'random' order pattern
+
+---Iterates shaped characters, yielding the host index, the character and a
+---reusable info table. The index always addresses ctx.chars, so filtered
+---loops stay compatible with the mt.layout helpers.
+---@param ctx table OnLayout context
+---@param options MtEachCharOptions|nil
+---@return function iterator yielding index, character, MtEachInfo
+function mt.each_char(ctx, options)
+    assert(ctx and ctx.chars and type(ctx.char_count) == "number",
+        "each_char requires an OnLayout context")
+    return eachIterator(ctx, options, false)
+end
+
+---@class MtEachPartOptions
+---@field from number|nil first part index to visit, floored (default 1)
+---@field to number|nil last part index to visit, floored (default ctx.part_count)
+---@field from_char number|nil skip parts whose owning character index is below this
+---@field to_char number|nil skip parts whose owning character index is above this
+---@field line number|nil restrict to parts on this line_index
+---@field order string|nil 'asc'|'desc'|'center'|'random', drives info.progress
+---@field seed integer|nil seed for the 'random' order pattern
+
+---Iterates shaped parts, yielding the host index, the part and a reusable
+---info table that also resolves the owning character. Progress runs across
+---the whole filtered set: it does not restart on character boundaries.
+---@param ctx table OnLayout context
+---@param options MtEachPartOptions|nil
+---@return function iterator yielding index, part, MtEachInfo
+function mt.each_part(ctx, options)
+    assert(ctx and ctx.parts and type(ctx.part_count) == "number",
+        "each_part requires an OnLayout context")
+    return eachIterator(ctx, options, true)
 end
 
 ---@class MtLayoutLineGroup
@@ -1722,18 +2066,22 @@ end
 ---The result is in canvas-normalized Y-up coordinates before 3D, projection,
 ---and deformation. Stroke and shadow extents are not geometry bounds.
 ---@param ctx table
----@param targets table array of 1-based character or part indices
+---@param targets table|nil array of 1-based indices, or nil for every target
 ---@param targetType string|nil "character" (default) or "part"
 ---@return table|nil bounds
 function mt.layout.measure_bounds_2d(ctx, targets, targetType)
     assert(ctx and ctx.canvas and ctx.global, "measure_bounds_2d requires an OnLayout context")
-    assert(type(targets) == "table", "measure_bounds_2d targets must be a table")
+    assert(targets == nil or type(targets) == "table",
+        "measure_bounds_2d targets must be a table or nil")
     local currentTargetType = targetType or "character"
     assert(currentTargetType == "character" or currentTargetType == "part",
         "measure_bounds_2d targetType must be 'character' or 'part'")
+    local selectAll = targets == nil
     local selected = {}
-    for _, targetIndex in ipairs(targets) do
-        selected[targetIndex] = true
+    if not selectAll then
+        for _, targetIndex in ipairs(targets) do
+            selected[targetIndex] = true
+        end
     end
 
     local bounds = {
@@ -1746,8 +2094,11 @@ function mt.layout.measure_bounds_2d(ctx, targets, targetType)
     local charactersWithParts = {}
     for partIndex = 1, ctx.part_count do
         local part = ctx.parts[partIndex]
-        local selectedPart = currentTargetType == "part" and selected[partIndex]
-        local selectedCharacter = currentTargetType == "character" and selected[part.character_index]
+        local selectedPart =
+            currentTargetType == "part" and (selectAll or selected[partIndex])
+        local selectedCharacter =
+            currentTargetType == "character"
+            and (selectAll or selected[part.character_index])
         if selectedPart or selectedCharacter then
             local width = part.geometry.bounds_width * ctx.canvas.width
             local height = part.geometry.bounds_height * ctx.canvas.height
@@ -1763,7 +2114,8 @@ function mt.layout.measure_bounds_2d(ctx, targets, targetType)
 
     if currentTargetType == "character" then
         for characterIndex = 1, ctx.char_count do
-            if selected[characterIndex] and not charactersWithParts[characterIndex] then
+            if (selectAll or selected[characterIndex])
+                and not charactersWithParts[characterIndex] then
                 local character = ctx.chars[characterIndex]
                 local centerX, centerY = layoutNormalizedPoint(
                     ctx, character.geometry.bounds_center_x, character.geometry.bounds_center_y)
@@ -2774,6 +3126,36 @@ local function resolveTimelineSpan(ctx, fallbackDuration)
     return duration, elapsed
 end
 
+---Returns the host clip duration, or a fallback duration when unavailable.
+---@param ctx table
+---@param fallbackDuration number|nil defaults to 4 seconds
+---@return number
+function mt.timeline.duration(ctx, fallbackDuration)
+    if type(ctx) ~= "table" or type(ctx.time) ~= "number" then
+        error("mt.timeline.duration: ctx must contain a numeric time", 2)
+    end
+    if fallbackDuration ~= nil
+        and (type(fallbackDuration) ~= "number"
+            or fallbackDuration ~= fallbackDuration
+            or fallbackDuration == math.huge
+            or fallbackDuration == -math.huge
+            or fallbackDuration <= 0.0) then
+        error("mt.timeline.duration: fallbackDuration must be a finite positive number", 2)
+    end
+    local duration = fallbackDuration or 4.0
+    if ctx.timeline and ctx.timeline.available then
+        local hostDuration = ctx.timeline.duration_seconds
+        if type(hostDuration) == "number"
+            and hostDuration == hostDuration
+            and hostDuration ~= math.huge
+            and hostDuration ~= -math.huge
+            and hostDuration > 0.0 then
+            duration = hostDuration
+        end
+    end
+    return duration
+end
+
 ---Returns the remaining seconds until the clip end.
 ---@param ctx table
 ---@param fallbackDuration number|nil
@@ -2826,6 +3208,39 @@ end
 
 local setTimelineContextMetatable = setmetatable
 
+---@param apiName string
+---@param ctx table
+---@param start number
+---@param duration number
+local function validateTimelineWindow(apiName, ctx, start, duration)
+    if type(ctx) ~= "table" or type(ctx.time) ~= "number" then
+        error(apiName .. ": ctx must contain a numeric time", 3)
+    end
+    if type(start) ~= "number"
+        or start ~= start
+        or start == math.huge
+        or start == -math.huge then
+        error(apiName .. ": start must be a finite number", 3)
+    end
+    if type(duration) ~= "number"
+        or duration ~= duration
+        or duration == math.huge
+        or duration == -math.huge
+        or duration <= 0.0 then
+        error(apiName .. ": duration must be a finite positive number", 3)
+    end
+end
+
+---Returns clamped linear progress through a time window in the source context.
+---@param ctx table
+---@param start number window start in source-context seconds
+---@param duration number positive window duration in seconds
+---@return number
+function mt.timeline.window_progress(ctx, start, duration)
+    validateTimelineWindow("mt.timeline.window_progress", ctx, start, duration)
+    return mt.saturate((ctx.time - start) / duration)
+end
+
 ---@param ctx table
 ---@param localTime number
 ---@param duration number
@@ -2867,23 +3282,7 @@ end
 ---@param duration number positive window duration in seconds
 ---@return table
 function mt.timeline.window_ctx(ctx, start, duration)
-    if type(ctx) ~= "table" or type(ctx.time) ~= "number" then
-        error("mt.timeline.window_ctx: ctx must contain a numeric time", 2)
-    end
-    if type(start) ~= "number"
-        or start ~= start
-        or start == math.huge
-        or start == -math.huge then
-        error("mt.timeline.window_ctx: start must be a finite number", 2)
-    end
-    if type(duration) ~= "number"
-        or duration ~= duration
-        or duration == math.huge
-        or duration == -math.huge
-        or duration <= 0.0 then
-        error("mt.timeline.window_ctx: duration must be a finite positive number", 2)
-    end
-
+    validateTimelineWindow("mt.timeline.window_ctx", ctx, start, duration)
     local localTime = mt.clamp(ctx.time - start, 0.0, duration)
     return makeTimelineChainContext(ctx, localTime, duration)
 end

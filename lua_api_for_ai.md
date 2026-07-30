@@ -342,7 +342,7 @@ recognised (`@mt` / `@mug` also work).
 -- @title Falling Letters
 -- @author Mug
 -- @version 1.0
--- @api_level 5
+-- @api_level 6
 ```
 
 `@recommend` sets initial Inspector values. Use it **only** when the effect needs
@@ -1038,6 +1038,28 @@ part.path : MtDrawingPath [R:path read-only]
     Mutable path initialized from the original glyph part and committed atomically after OnPath succeeds. (since API level 5)
 ```
 
+### each_info
+
+```text
+each_info.progress : number [R:layout,path read-only]
+    unit=unit_interval
+    Normalized position within the filtered set, following the order option. (since API level 6)
+each_info.n : integer [R:layout,path read-only]
+    One-based counter within the filtered set. Differs from the yielded index whenever a filter is active. (since API level 6)
+each_info.count : integer [R:layout,path read-only]
+    Number of elements in the filtered set (at least 1). (since API level 6)
+each_info.first : boolean [R:layout,path read-only]
+    True on the first iteration of the filtered set. (since API level 6)
+each_info.last : boolean [R:layout,path read-only]
+    True on the last iteration of the filtered set. (since API level 6)
+each_info.char : MtCharacter [R:layout,path read-only]
+    mt.each_part only: the character owning this part. (since API level 6)
+each_info.char_index : integer [R:layout,path read-only]
+    mt.each_part only: one-based index of the owning character in ctx.chars. (since API level 6)
+each_info.index_in_char : integer [R:layout,path read-only]
+    mt.each_part only: one-based part index within the owning character. (since API level 6)
+```
+
 ### ctx.paths
 
 ```text
@@ -1123,12 +1145,16 @@ mt.inverse_lerp(from, to, value) -> number
     Return the interpolation factor of a value between two endpoints.
 mt.remap(value, inLow, inHigh, outLow, outHigh, clamped?) -> number
     Map a value between ranges.
-mt.wrap(value, low, high) -> number
-    Wrap a value into a half-open range.
+mt.wrap(value, boundaryA, boundaryB) -> number
+    Wrap a value into the half-open interval between two boundaries, regardless of their order.
 mt.lerp_angle(from, to, t) -> number
     Interpolate degrees along the shortest angular path.
 mt.distribute(index, count) -> number
     Map a one-based index evenly across 0 through 1.
+mt.each_char(ctx, options?) -> function
+    Iterate shaped characters with optional filtering. Yields the ctx.chars index, the character, and a reusable info table with progress, n, count, first and last. Options: from, to (index range), line (line_index filter), order ('asc'|'desc'|'center'|'random') selecting how info.progress spans 0 through 1, seed for the random order. info is reused every iteration: copy values out to keep them. (since API level 6)
+mt.each_part(ctx, options?) -> function
+    Iterate shaped parts with optional filtering. Yields the ctx.parts index, the part, and a reusable info table that also resolves char, char_index and index_in_char. Adds from_char and to_char, keeping only parts whose owning character index falls in that range; they intersect with from and to. info.progress spans the whole filtered set and does not restart on character boundaries. (since API level 6)
 mt.falloff(distance, radius) -> number
     Smooth bell-shaped influence weight: 1 at the centre, easing toward 0 with distance. (since API level 3)
 mt.polar_offset(angleDegrees, radius) -> number, number
@@ -1143,14 +1169,16 @@ mt.pingpong(t, period) -> number
     Repeating 0 to 1 to 0 motion.
 mt.stagger(time, index, delay, duration) -> number
     Per-index staggered progress in the range 0 to 1.
+mt.stagger_progress(progress, position, span) -> number
+    Spread an existing normalized progress across element positions while ensuring every element finishes at progress 1. (since API level 6)
 mt.keyframes(keys, time) -> number|color
     Closed-form piecewise keyframe interpolation over number or color keys with optional per-segment easing.
 mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?) -> number
-    Staggered progress with configurable directional patterns.
-mt.random(seed, index) -> number
-    Stable order-independent random value.
-mt.random_range(seed, index, low, high) -> number
-    Stable random value in a requested range.
+    Staggered progress with configurable directional patterns. 'random' assigns a duplicate-free shuffled rank, so delays stay evenly spaced.
+mt.random(seed, index, channel?) -> number
+    Stable order-independent random value with an optional named channel.
+mt.random_range(seed, index, low, high, channel?) -> number
+    Stable random value in a requested range with an optional named channel.
 mt.noise1(x, seed?) -> number
     Deterministic smooth one-dimensional value noise.
 mt.noise2(x, y, seed?) -> number
@@ -1186,6 +1214,8 @@ mt.friction_decay(t, speed, friction) -> number, number
 ### mt.color.*
 
 ```text
+mt.color.resolve_fill(ctx, target) -> MtColor, string, number
+    Resolve the fill color, mode and object opacity inherited by a character or part. (since API level 6)
 mt.color.lerp(from, to, t) -> MtColor
     Interpolate two RGBA color tables.
 mt.color.from_hsv(hue, saturation, value, alpha?) -> MtColor
@@ -1272,8 +1302,8 @@ mt.layout.radial_distance(ctx, canvasX, canvasY, centerX?, centerY?) -> number
     Aspect-corrected distance from a canvas point to the centre of a radial effect. (since API level 3)
 mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY) -> number, number
     Calculates the relative offset_x and offset_y required to place a character or part anchor at an exact pre-3D canvas position (canvasX, canvasY) without mutating item properties. (since API level 3)
-mt.layout.measure_bounds_2d(ctx, targets, targetType?) -> table|nil
-    Returns axis-aligned bounds of transformed natural part boxes after the complete 2D hierarchy and before 3D, projection, and deformation. (since API level 2)
+mt.layout.measure_bounds_2d(ctx, targets?, targetType?) -> table|nil
+    Returns axis-aligned bounds of transformed natural part boxes after the complete 2D hierarchy and before 3D, projection, and deformation. Omit targets to measure every character or part. (since API level 2)
 mt.layout.queue_on_path(ctx, path, options?) -> number[]
     Distributes characters or parts along an arc-length path in reading order, spaced by their own natural advances, and returns the normalized distance ratio each item occupies. (since API level 3)
 mt.layout.group_by_line(ctx) -> MtLayoutLineGroup[]
@@ -1315,10 +1345,14 @@ path:at_distance(distanceRatio) -> number, number, number
 ```text
 mt.timeline.progress(ctx, fallbackDuration?) -> number
     Returns the host timeline progress, falling back to a looping progress if unavailable.
+mt.timeline.duration(ctx, fallbackDuration?) -> number
+    Returns a finite positive host clip duration, or a fallback when no usable host duration is available. (since API level 6)
 mt.timeline.remaining(ctx, fallbackDuration?) -> number
     Remaining seconds until the clip end, using a looping fallback duration when the host timeline is unavailable.
 mt.timeline.intro_outro_seconds(ctx, introSeconds, outroSeconds, fallbackDuration?) -> number, number
     Real-time intro and outro progress anchored to the clip head and tail, compressed proportionally when the clip is shorter than the requested seconds.
+mt.timeline.window_progress(ctx, start, duration) -> number
+    Returns linear progress through a context-local time window, clamped to 0 before the window and 1 after it. (since API level 6)
 mt.timeline.chain(ctx, initialValue, segments, options?) -> any
     Evaluates duration-based pure-function segments with a segment-local context, passing each completed segment's final return value to the next and supporting fixed or remaining-span holds. (since API level 4)
 mt.timeline.window_ctx(ctx, start, duration) -> table
@@ -1348,13 +1382,13 @@ start from Index by Purpose when you only know the goal. Do not read end to end.
 |---|---|
 | Value constraints and range mapping | `mt.clamp` / `mt.saturate` / `mt.remap` / `mt.wrap` |
 | Interpolation and keyframes | `mt.lerp` / `mt.inverse_lerp` / `mt.lerp_angle` / `mt.smoothstep` / `mt.keyframes` |
-| Progress distribution | `mt.distribute` / `mt.stagger` / `mt.stagger_pattern` |
+| Progress distribution | `mt.distribute` / `mt.stagger` / `mt.stagger_progress` / `mt.stagger_pattern` |
 | Distance-based influence | `mt.falloff` |
 | Deterministic random values and noise | `mt.random` / `mt.random_range` / `mt.noise1` / `mt.noise2` / `mt.wiggle` |
 | Cycles and springs | `mt.cycle` / `mt.pingpong` / `mt.wave` / `mt.wave_square` / `mt.wave_triangle` / `mt.wave_sawtooth` / `mt.spring` |
 | Displacement from polar coordinates | `mt.polar_offset_2d` |
 | Physical motion | `mt.bounce_y` / `mt.bounce_x` / `mt.bounce_ground` / `mt.bounce_wall` / `mt.impact_squash` / `mt.projectile_2d` / `mt.friction_decay` |
-| Color | `mt.color.lerp` / `mt.color.from_hsv` / `mt.color.with_alpha` / `mt.color.from_oklch` |
+| Color | `mt.color.resolve_fill` / `mt.color.lerp` / `mt.color.from_hsv` / `mt.color.with_alpha` / `mt.color.from_oklch` |
 | Easing | `mt.ease.*` |
 | Reflow and line-based grouping | `mt.layout.reflow` / `mt.layout.group_by_line` |
 | Canvas position, distance, and pivot | `mt.layout.place_2d` / `mt.layout.get_canvas_position_2d` / `mt.layout.canvas_to_offset_2d` / `mt.layout.radial_distance` / `mt.layout.pivot_at_2d` |
@@ -1363,8 +1397,7 @@ start from Index by Purpose when you only know the goal. Do not read end to end.
 | Motion paths | `mt.path.bezier` / `mt.path.catmull_rom` / `mt.path.arc_length` |
 | Path creation and editing | `mt.svg_path` / `path:*` |
 | UTF-8 text processing | `mt.text.slice` / `mt.text.classify` |
-| Clip time | `mt.timeline.progress` / `mt.timeline.remaining` / `mt.timeline.intro_outro_seconds` / `mt.timeline.window_ctx` / `mt.timeline.chain` |
-| Deprecated compatibility APIs | `mt.storage` / `mt.polar_offset` / `mt.layout.retypeset` / `mt.layout.canvas_to_offset` / `mt.layout.set_canvas_position` / `mt.layout.group_bounds` / `mt.timeline.intro_outro` |
+| Clip time | `mt.timeline.progress` / `mt.timeline.duration` / `mt.timeline.remaining` / `mt.timeline.intro_outro_seconds` / `mt.timeline.window_progress` / `mt.timeline.window_ctx` / `mt.timeline.chain` |
 
 ### 1. Value Constraints and Range Mapping
 
@@ -1440,19 +1473,25 @@ Maps a value from an input interval to an output interval. Use it for general in
 character.offset_y = mt.remap(ctx.time, 0.5, 1.2, 0.7, 0.5, true)
 ```
 
-#### `mt.wrap(value, low, high)`
+#### `mt.wrap(value, boundaryA, boundaryB)`
 
 API level: `1+`
 
-Wraps a value within the half-open interval `[low, high)`. Use it to make angles or hues periodic.
+Wraps a value within the half-open interval
+`[min(boundaryA, boundaryB), max(boundaryA, boundaryB))`.
+The boundaries may be specified in either order. Use it to make angles or hues periodic.
+
+> **Changed in API level 6**: The boundaries are now treated as `boundaryA` / `boundaryB`
+> instead of `low` / `high`. Reversed boundaries now wrap over the interval from the
+> smaller boundary to the larger boundary.
 
 ##### Arguments
 
 | Argument | Type | Unit | Default | Description |
 |---|---|---|---|---|
 | `value` | `number` | — | Required | Value to wrap |
-| `low` | `number` | — | Required | Start of the interval. Included in the result |
-| `high` | `number` | — | Required | End of the interval. Not included in the result |
+| `boundaryA` | `number` | — | Required | One boundary that defines the interval |
+| `boundaryB` | `number` | — | Required | The other boundary that defines the interval |
 
 ##### Return Value
 
@@ -1462,7 +1501,7 @@ Wraps a value within the half-open interval `[low, high)`. Use it to make angles
 
 ##### Constraints and Errors
 
-Specify a `high` value greater than `low`. If `high <= low`, the function returns `low`.
+If both boundaries are equal, the function returns that boundary value.
 
 ### 2. Interpolation and Keyframes
 
@@ -1629,6 +1668,108 @@ character.fill.use = true
 character.fill.color = mt.color.from_hsv(hue, 0.8, 1.0)
 ```
 
+#### `mt.each_char(ctx, options?)`
+
+API level: `6+`
+
+Returns an iterator over shaped characters with optional filtering. `index` always addresses `ctx.chars`, so it can be passed straight to `ctx.chars[index]` or to the `mt.layout.*` helpers. The counter within the filtered subset is `info.n`.
+
+##### Arguments
+
+| Argument | Type | Unit | Default | Description |
+|---|---|---|---|---|
+| `ctx` | `table` | — | Required | OnLayout / OnPath context |
+| `options.from` | `integer` | — | `1` | First character index to visit |
+| `options.to` | `integer` | — | `ctx.char_count` | Last character index to visit, inclusive |
+| `options.line` | `integer` | — | No filter | Keep only characters with this `line_index` |
+| `options.order` | `string` | — | `"asc"` | How `info.progress` is assigned: `"asc"` / `"desc"` / `"center"` / `"random"` |
+| `options.seed` | `integer` | — | `0` | Seed selecting the order when `order = "random"` |
+
+##### Return Value
+
+| Type | Description |
+|---|---|
+| `function` | Iterator yielding `index` (into `ctx.chars`), `character` and `info` |
+
+Fields of `info`:
+
+| Field | Type | Description |
+|---|---|---|
+| `progress` | `number` | Normalized position in 0–1 following `order` |
+| `n` | `integer` | 1-based counter within the filtered subset |
+| `count` | `integer` | Number of elements in the filtered subset (at least `1`) |
+| `first` / `last` | `boolean` | Whether this is the first or last element of the filtered subset |
+
+`order` only remaps `progress`; the visit order is always ascending by index.
+
+| Value | `progress` sequence (5 elements) |
+|---|---|
+| `"asc"` | `0, 0.25, 0.5, 0.75, 1` |
+| `"desc"` | `1, 0.75, 0.5, 0.25, 0` |
+| `"center"` | `1, 0.5, 0, 0.5, 1` |
+| `"random"` | A duplicate-free shuffle determined by the seed |
+
+`"center"` is the normalized distance from the midpoint. With an even count no element sits on the midpoint, so the minimum is not `0`.
+
+> **Note**: `info` is the same table on every iteration. Copy the values out if they need to outlive the loop.
+
+##### Example
+
+```lua
+-- Open the second line from the centre outwards
+for index, character, info in mt.each_char(ctx, { line = 1, order = "center" }) do
+    local delay = info.progress * 0.4
+    character.opacity = mt.saturate((ctx.time - delay) * 4.0)
+end
+```
+
+#### `mt.each_part(ctx, options?)`
+
+API level: `6+`
+
+Returns an iterator over shaped parts with optional filtering. It follows the same rules as `mt.each_char`, and additionally resolves the owning character on `info` and can filter by it.
+
+##### Arguments
+
+| Argument | Type | Unit | Default | Description |
+|---|---|---|---|---|
+| `ctx` | `table` | — | Required | OnLayout / OnPath context |
+| `options.from` | `integer` | — | `1` | First part index to visit |
+| `options.to` | `integer` | — | `ctx.part_count` | Last part index to visit, inclusive |
+| `options.from_char` | `integer` | — | No filter | Keep only parts whose owning character index is at or above this |
+| `options.to_char` | `integer` | — | No filter | Keep only parts whose owning character index is at or below this |
+| `options.line` | `integer` | — | No filter | Keep only parts with this `line_index` |
+| `options.order` | `string` | — | `"asc"` | How `info.progress` is assigned, as in `mt.each_char` |
+| `options.seed` | `integer` | — | `0` | Seed selecting the order when `order = "random"` |
+
+`from` / `to` (a range of part indices) and `from_char` / `to_char` (a range of owning character indices) are separate axes. When both are given, only parts satisfying both pass.
+
+##### Return Value
+
+| Type | Description |
+|---|---|
+| `function` | Iterator yielding `index` (into `ctx.parts`), `part` and `info` |
+
+`info` carries every field from `mt.each_char` plus:
+
+| Field | Type | Description |
+|---|---|---|
+| `char` | `MtCharacter` | The character owning this part (an element of `ctx.chars`) |
+| `char_index` | `integer` | Index of the owning character in `ctx.chars` |
+| `index_in_char` | `integer` | Position within the owning character |
+
+`info.progress` spans the **whole filtered set** across 0–1. It does not restart on character boundaries. To span 0–1 per character, nest `mt.each_char` and `mt.each_part`.
+
+##### Example
+
+```lua
+-- Lift the parts of characters 3 through 5 in one continuous run
+for index, part, info in mt.each_part(ctx, { from_char = 3, to_char = 5 }) do
+    part.offset_y = info.progress * 0.05
+    part.rotation = info.char.rotation * 0.5
+end
+```
+
 #### `mt.stagger(time, index, delay, duration)`
 
 API level: `1+`
@@ -1665,6 +1806,68 @@ for index = 1, ctx.char_count do
 end
 ```
 
+#### `mt.stagger_progress(progress, position, span)`
+
+API level: `6+`
+
+Adds a position-dependent start delay to an existing 0–1 normalized progress.
+The element at `position = 0` starts with the shared progress, while the element
+at `position = 1` starts when the shared progress reaches `span`. Every element
+finishes when the shared progress reaches 1.
+
+Use `mt.stagger` when constructing progress from time in seconds, an index, and
+an individual animation duration. Use `mt.stagger_progress` when distributing
+progress already obtained from a helper such as
+`mt.timeline.intro_outro_seconds`.
+
+##### Arguments
+
+| Argument | Type | Unit | Default | Description |
+|---|---|---|---|---|
+| `progress` | `number` | 0–1 | Required | Shared progress to distribute. Values outside the range are accepted, and the result is clamped to 0–1 |
+| `position` | `number` | 0–1 | Required | Normalized element position. Values outside the range are clamped to 0–1. Usually `info.progress` |
+| `span` | `number` | less than 1 | Required | Fraction of the shared window across which start times are distributed |
+
+##### Return Value
+
+| Type | Unit | Description |
+|---|---|---|
+| `number` | 0–1 | Progress for the element at `position` |
+
+The result is calculated as follows:
+
+```lua
+mt.saturate((progress - mt.saturate(position) * span) / (1.0 - span))
+```
+
+##### Constraints and Errors
+
+| Condition | Description |
+|---|---|
+| `progress` or `position` is not finite | Error |
+| `span` is not finite | Error |
+| `span < 0` or `span >= 1` | Error |
+
+##### Example
+
+```lua
+local introProgress, outroProgress =
+    mt.timeline.intro_outro_seconds(ctx, 0.5, 0.5, 5.0)
+
+for _, character, info in mt.each_char(ctx, { order = "center" }) do
+    local appear = mt.ease.out_back(
+        mt.stagger_progress(introProgress, info.progress, 0.35))
+    local disappear = mt.ease.in_cubic(
+        mt.stagger_progress(outroProgress, info.progress, 0.25))
+
+    character.scale = appear
+    character.opacity = appear * (1.0 - disappear)
+end
+```
+
+Changing the `order` of `mt.each_char` or `mt.each_part` changes only the start
+time assignment, not the loop's visit order.
+
 #### `mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?)`
 
 API level: `1+`
@@ -1683,7 +1886,9 @@ Returns staggered progress with a configurable starting direction or order.
 | `duration` | `number` | seconds | Required | Animation duration |
 | `seed` | `integer` | — | `42` | Random seed when `pattern = "random"` |
 
-`"random"` assigns an independent deterministic delay to each index. It does not produce a random permutation without duplicates.
+`"random"` assigns a duplicate-free shuffled rank to each index. Ranks are always exactly one apart, so the delays stay evenly spaced.
+
+> **Changed in API level 6**: delays used to come from an independent random per index, which let several characters land on nearly the same delay while other stretches stayed empty. It now uses a permutation, so the same `seed` produces a different order than before.
 
 ##### Return Value
 
@@ -1735,11 +1940,15 @@ character.offset_y = 0.5 + mt.falloff(distance, 0.25) * 0.1
 
 ### 5. Deterministic Random Values and Noise
 
-#### `mt.random(seed, index)`
+#### `mt.random(seed, index, channel?)`
 
 API level: `1+`
 
-A stable random value determined solely by the `(seed, index)` pair. Because it does not depend on call order, it can safely be used to vary individual characters or parts (`math.random` depends on call order and cannot be used safely for this purpose).
+A stable random value determined solely by the `(seed, index, channel)` tuple. Because it does not depend on call order, it can safely be used to vary individual characters or parts (`math.random` depends on call order and cannot be used safely for this purpose).
+
+> **Added in API level 6**: An optional string `channel` is now accepted.
+> Name each use, such as `"angle"` or `"distance"`, to obtain independent random
+> values without manually salting the seed or index. Omitting it preserves the previous results.
 
 ##### Arguments
 
@@ -1747,6 +1956,7 @@ A stable random value determined solely by the `(seed, index)` pair. Because it 
 |---|---|---|---|---|
 | `seed` | `integer` | — | Required | Value selecting the random sequence. Use the same seed for the same purpose |
 | `index` | `integer` | — | Required | Position within the sequence, such as a character index |
+| `channel` | `string` | — | Omitted | Name separating one use from another. API level 6 or later |
 
 ##### Return Value
 
@@ -1754,11 +1964,18 @@ A stable random value determined solely by the `(seed, index)` pair. Because it 
 |---|---|---|
 | `number` | 0–1 | Random value in `[0, 1)`. The same arguments always produce the same value |
 
-#### `mt.random_range(seed, index, low, high)`
+##### Constraints and Errors
+
+The UTF-8 bytes of `channel` are converted with a fixed 32-bit hash. Unicode normalization
+is not performed, so ASCII names such as `"angle"` or `"color.hue"` are recommended.
+The 32-bit hash can theoretically collide and is not suitable for cryptographic use.
+
+#### `mt.random_range(seed, index, low, high, channel?)`
 
 API level: `1+`
 
-Returns the result of `mt.random` mapped to `[low, high)`.
+Returns the result of `mt.random` mapped to `[low, high)`. In API level 6 or later,
+an optional string `channel` separates random sequences by purpose.
 
 ##### Arguments
 
@@ -1766,6 +1983,7 @@ Returns the result of `mt.random` mapped to `[low, high)`.
 |---|---|---|---|---|
 | `seed` / `index` | `integer` | — | Required | Same as `mt.random` |
 | `low` / `high` | `number` | — | Required | Output range |
+| `channel` | `string` | — | Omitted | Same as `mt.random`. API level 6 or later |
 
 ##### Return Value
 
@@ -2393,14 +2611,14 @@ Because the launch position cannot be specified in positional-argument form, thi
 
 ```lua
 -- Scatter fragments in a fan and make them fall while rotating
-local angle = mt.random_range(seed, index, -140.0, -40.0)
-local speed = mt.random_range(seed, index + 100, 0.6, 1.2)
+local angle = mt.random_range(seed, index, -140.0, -40.0, "angle")
+local speed = mt.random_range(seed, index, 0.6, 1.2, "speed")
 local flight = mt.projectile_2d({
     t = ctx.time - burstTime,
     speed = speed,
     angle = angle,
     gravity = 3.0,
-    spin = mt.random_range(seed, index + 200, -360.0, 360.0),
+    spin = mt.random_range(seed, index, -360.0, 360.0, "spin"),
 })
 part.offset_x = 0.5 + flight.x
 part.offset_y = 0.5 + flight.y
@@ -2447,6 +2665,52 @@ character.offset_x = 0.5 - 0.5 + travelled
 
 See [“color” in Concepts](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-color) for the color format.
 All functions return a new color table and do not modify their arguments.
+
+#### `mt.color.resolve_fill(ctx, target)`
+
+API level: `6+`
+
+Resolves the fill applied to a character or part and returns its base color,
+fill mode, and object opacity. It is available in `OnLayout` and `OnPath`.
+
+##### Arguments
+
+| Argument | Type | Unit | Default | Description |
+|---|---|---|---|---|
+| `ctx` | `table` | — | Required | Current OnLayout or OnPath context |
+| `target` | `character \| part` | — | Required | An element of `ctx.chars` or `ctx.parts` |
+
+##### Return Values
+
+| Value | Type | Unit | Description |
+|---|---|---|---|
+| `color` | `color` | — | Copy of the resolved solid color, or of `ctx.global.fill.color`, which supplies the starting color for a Global gradient or Crayon |
+| `mode` | `string` | — | `"solid"` / `"gradient"` / `"crayon"` / `"transparent"` |
+| `opacity` | `number` | 0–1 | Product of the Global, owning-character, and target-part `opacity` values, clamped to 0–1 |
+
+For a part, resolution checks `part.fill.use`, then the owning character's
+`fill.use`, then Global. For a character, it checks only the character and
+Global; individual colors on descendant parts are not included. When an
+individual color is selected, `mode` is always `"solid"`.
+
+When the fill reaches Global, the mode is `"transparent"` if
+`fill.transparent` is `true`, `"solid"` if `gradient.color_space` is `"none"`,
+`"crayon"` if it is `"crayon"`, and `"gradient"` for every other gradient
+mode.
+
+The returned `opacity` does not include the color's own `a` component. The
+returned color is a new table, so modifying it does not affect the original
+`fill.color`.
+
+```lua
+for _, part in mt.each_part(ctx) do
+    local color, mode, opacity = mt.color.resolve_fill(ctx, part)
+    if mode == "gradient" and opacity > 0.0 then
+        -- This part is filled by the Global gradient.
+        print(color.r, ctx.global.gradient.end_color.r)
+    end
+end
+```
 
 #### `mt.color.lerp(from, to, t)`
 
@@ -3378,7 +3642,7 @@ character.rotation = math.sin(ctx.time * 3.0) * 8.0
 
 ### 13. Bounds After 2D Transforms
 
-#### `mt.layout.measure_bounds_2d(ctx, targets, targetType?)`
+#### `mt.layout.measure_bounds_2d(ctx, targets?, targetType?)`
 
 API level: `2+`
 
@@ -3391,7 +3655,7 @@ These bounds are **before 3D, camera, projection, and Deform are applied**. They
 | Argument | Type | Unit | Default | Description |
 |---|---|---|---|---|
 | `ctx` | `table` | — | Required | `OnLayout` context |
-| `targets` | `table` | — | Required | Array of 1-based character or part indices |
+| `targets` | `table \| nil` | — | All | Array of 1-based character or part indices. `nil` selects every target of the requested type |
 | `targetType` | `string` | — | `"character"` | Target type: `"character"` or `"part"` |
 
 ##### Return Value
@@ -3412,7 +3676,15 @@ The bounds table has the following fields. All coordinate systems are Y-up.
 
 ##### Constraints and Errors
 
-Specify `targets` as a table, and specify `"character"` or `"part"` for `targetType`.
+Selecting all targets by omitting `targets` is available from API level 6.
+`targetType = "character"` selects every character, while `"part"` selects
+every part. An empty table `{}` does not select all; as before, it selects
+nothing and returns `nil`.
+
+All-character selection includes characters with no parts and uses their
+natural character bounds. All-part selection includes only elements present
+in `ctx.parts`. Visibility, opacity, and write-on state do not affect target
+selection; this function measures the specified geometry.
 
 ##### Example
 
@@ -3421,6 +3693,9 @@ local bounds = mt.layout.measure_bounds_2d(ctx, {1, 2, 3})
 if bounds then
     mt.layout.place_2d(ctx, ctx.chars[4], bounds.center_x, bounds.top + 0.05)
 end
+
+local allCharacterBounds = mt.layout.measure_bounds_2d(ctx)
+local allPartBounds = mt.layout.measure_bounds_2d(ctx, nil, "part")
 ```
 
 ### 14. Alignment on Paths
@@ -3998,6 +4273,38 @@ Gets the current progress from 0 to 1.
 
 When the timeline is unavailable, specify a positive value for `fallbackDuration`.
 
+#### `mt.timeline.duration(ctx, fallbackDuration?)`
+
+API level: `6+`
+
+Returns a positive host clip duration in seconds. When the host timeline is
+unavailable, or its duration in seconds is not finite and positive, it returns
+the requested fallback duration.
+
+##### Arguments
+
+| Argument | Type | Unit | Default | Description |
+|---|---|---|---|---|
+| `ctx` | `table` | — | Required | Context |
+| `fallbackDuration` | `number` | seconds | `4.0` | Virtual clip length used when the timeline is unavailable |
+
+##### Return Value
+
+| Type | Unit | Description |
+|---|---|---|
+| `number` | seconds | Host clip duration or fallback duration |
+
+##### Constraints and Errors
+
+An explicit `fallbackDuration` must be a finite positive number. When passed
+a derived context returned by `window_ctx`, this function returns the duration
+of that local time window.
+
+```lua
+local clipDuration =
+    mt.timeline.duration(ctx, kFallbackClipLength)
+```
+
 #### `mt.timeline.remaining(ctx, fallbackDuration?)`
 
 API level: `1+`
@@ -4053,6 +4360,50 @@ local intro, outro = mt.timeline.intro_outro_seconds(ctx, 0.8, 0.5)
 character.offset_y = 0.5 + (1.0 - mt.ease.out_cubic(intro)) * 0.2
 character.scale = character.scale * (1.0 - mt.ease.in_cubic(outro))
 ```
+
+#### `mt.timeline.window_progress(ctx, start, duration)`
+
+API level: `6+`
+
+Converts a time window in the supplied context to linear progress from 0 to 1.
+It returns exactly `0.0` before `start` and exactly `1.0` at or after
+`start + duration`. Within the window, it returns `(ctx.time - start) / duration`.
+
+##### Arguments
+
+| Argument | Type | Unit | Default | Description |
+|---|---|---|---|---|
+| `ctx` | `table` | — | Required | Context from which time is read |
+| `start` | `number` | seconds | Required | Start time within the context |
+| `duration` | `number` | seconds | Required | Length of the time window |
+
+##### Return Value
+
+| Type | Unit | Description |
+|---|---|---|
+| `number` | 0–1 | Linear progress through the window, clamped before and after it |
+
+##### Constraints and Errors
+
+- `ctx.time` must be a number.
+- `start` must be a finite number.
+- `duration` must be a finite positive number.
+
+##### Example
+
+```lua
+local appear =
+    mt.timeline.window_progress(ctx, 0.5, 0.8)
+local disappear =
+    mt.timeline.window_progress(ctx, 4.0, 0.5)
+
+character.opacity = appear * (1.0 - disappear)
+```
+
+##### Notes
+
+Use this when only progress is needed. Use `mt.timeline.window_ctx` when time and
+frame must also be localized before passing the context to time-dependent APIs.
 
 #### `mt.timeline.window_ctx(ctx, start, duration)`
 
@@ -4194,285 +4545,3 @@ When the timeline is unavailable, `options.fallback_duration` (default `4.0` sec
 > [!IMPORTANT]
 > `evaluate` is reevaluated within the same frame to obtain the ending values of past intervals. Write it as a pure function that returns a value calculated from its arguments without directly modifying `ctx` or a character, and apply only the final result.
 > Combine value-returning APIs such as `mt.bounce_y` with `segmentCtx.time`, rather than using APIs such as `mt.bounce_ground` that modify an item directly.
-
-### 19. Deprecated Compatibility APIs
-
-#### `mt.storage` `Deprecated`
-
-API level: `1+`
-
-`mt.storage` is retained for compatibility with existing scripts.
-In new scripts, store immutable values in `local` variables declared outside functions.
-
-| Type | Description |
-|---|---|
-| `table` | Compatibility storage that becomes read-only after `OnInitialize` completes |
-
-#### `mt.polar_offset(angleDegrees, radius)` `Deprecated`
-
-API level: `3+`
-
-Legacy polar-coordinate conversion that uses the angle system’s Y direction.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `angleDegrees` | `number` | degrees | Required | Direction. `0` degrees points right, and the positive direction is clockwise |
-| `radius` | `number` | displacement | Required | Distance in that direction |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | As defined by `radius` | `offsetX` |
-| `number` | As defined by `radius` | `screenOffsetY`. Positive downward in screen coordinates |
-
-> [!WARNING]
-> **Deprecated. Use `mt.polar_offset_2d`.**
-> The arguments are the same as for `mt.polar_offset_2d`, but because the return value uses the angle coordinate system (positive Y points down), its sign had to be reversed before passing it to `offset_y`.
-> Forgetting that reversal easily caused only the vertical motion to be inverted, so it has been replaced by `mt.polar_offset_2d`, which returns values in the position coordinate system.
-> The behavior has not changed, so existing scripts continue to work unchanged.
-
-##### Example
-
-```lua
--- Old: the caller must reverse the sign
-local dx, dy = mt.polar_offset(angle, radius)
-character.offset_y = 0.5 - dy
-
--- New: can be added directly
-local dx, dy = mt.polar_offset_2d(angle, radius)
-character.offset_y = 0.5 + dy
-```
-
-#### `mt.layout.retypeset(ctx, gap?, config?)` `Deprecated`
-
-API level: `1+`
-
-> [!CAUTION]
-> This is an API Level 1 compatibility function. Use `mt.layout.reflow` in new code.
-
-Recalculates character advance in a simplified manner using `geometry.advance_x/y`, while accounting for each character’s individual `scale` and `stretch`.
-It does not equalize gaps between visible ink bounds.
-Call it after applying per-character size animation, as the final retypesetting operation for the frame.
-Rotation, individual pivots, tracking, margins, and transformed outlines are not included in advance calculations.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Context |
-| `gap` | `number` | Ratio of canvas width or height | `0.0` | Extra spacing added between advances |
-| `config` | `table` | — | `nil` | Realignment settings |
-| `config.align` | `string` | — | `"baseline"` | Cross-axis alignment in horizontal writing: `"baseline"`, `"top"`, `"center"`, or `"bottom"` |
-| `config.mode` | `string` | — | `"horizontal"` | `"horizontal"` or `"vertical"` |
-| `config.targets` | `table` | — | All characters | Array of 1-based character indices to realign. Characters outside the target set are not changed |
-| `config.anchor` | `integer` | — | Smallest index in `targets` | Character index whose current position on the advance axis is fixed |
-| `config.baseline` | `string` | — | `"anchor"` | `"anchor"` takes the reference line from the current pose; `"natural"` takes it from the natural pose |
-
-With `config.baseline = "anchor"`, changing the anchor character’s `scale` each frame moves the entire line vertically along with the reference line.
-`"natural"` fixes the cross axis to the natural position and is suitable when used with a time-varying scale.
-`"anchor"` uses the current pose after scale and offset have been applied, while `"natural"` uses the pose from the Base layout with scale 1 and no offset.
-The anchor position on the advance axis remains at its current position in either case.
-`config.align` is not used by simplified vertical alignment.
-
-##### Return Value
-
-There is no return value.
-
-##### Changes
-
-Directly rewrites `offset_x` and `offset_y` for the target characters.
-
-> [!WARNING]
-> **When only some characters are targeted with `targets`, `gap` can cause the target range to collide with adjacent non-target characters.**
-> `gap` is added to spacing between characters within the target range on every call, expanding the width of the target range as a whole.
-> Because this function never changes coordinates for characters not included in `targets` (that is, it does not automatically make room based on non-target character positions), if an edge of the target range—the first or last character—was originally adjacent to a non-target character, each added `gap` expands the range toward and eventually overlaps that non-target character.
-> This is not a problem when all characters are targeted or when sufficient space already exists before and after the target range.
-> When targeting only some characters whose boundary is adjacent to another character, set `gap` to `0` or manually provide spacing outside the target range with tracking / margins.
-
-##### Example
-
-```lua
--- Align only characters at indices 3–6, fixing the position of character 3 as the reference and arranging characters on both sides
-mt.layout.retypeset(ctx, 0.02, {
-    targets = {3, 4, 5, 6},
-    anchor = 3,
-    align = "baseline"
-})
-```
-
-#### `mt.layout.canvas_to_offset(resolvedGlobal, canvasWidth, canvasHeight, naturalCenterX, naturalCenterY, canvasX, canvasY)` `Deprecated`
-
-API level: `1+`
-
-> [!CAUTION]
-> This is an API Level 1 compatibility function. It inverts only the 2D Global transform. Use `mt.layout.place_2d` in new code.
-
-Use this function to calculate the offset that moves the natural center of a character or part to a **target canvas position while accounting for the 2D Global transform**.
-`offset_x` / `offset_y` represent displacement from the item’s own natural position and are in the coordinate system **before** the overall `ctx.global` transform (position / rotation / scale / stretch / pivot).
-Therefore, assigning target canvas coordinates directly, such as `offset_x = canvasX`, produces the intended screen position only while `ctx.global` has its initial values.
-If the whole composition is rotated, moved, or enlarged, the actual position shifts by that transform.
-This function cancels the 2D transform of `ctx.global`, then calculates the `offset_x` / `offset_y` corresponding to the target canvas position.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `resolvedGlobal` | `table` | — | Required | `ctx.global` resolved in `OnPreLayout` |
-| `canvasWidth` / `canvasHeight` | `number` | px | Required | `ctx.canvas.width` and `ctx.canvas.height` |
-| `naturalCenterX` / `naturalCenterY` | `number` | canvas normalized position | Required | Natural center of the target. For characters, `geometry.bounds_center_x/y`; for parts, `geometry.canvas_center_x/y` |
-| `canvasX` / `canvasY` | `number` | canvas normalized position | Required | Destination coordinates |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | canvas normalized displacement | `offsetX` |
-| `number` | canvas normalized displacement | `offsetY` |
-
-##### Constraints and Errors
-
-This function inverts only `position_x/y`, `rotation`, `scale`, `stretch_x/y`, and `pivot_x/y`.
-It does not invert individual character/part rotation or pivot, the hierarchical transform from an owning character to a part, Global or individual 3D values, camera, projection, or Deform.
-Width, height, and `global.scale * stretch_x/y` must be nonzero.
-
-##### Example
-
-```lua
--- Even if 2D ctx.global.rotation / position_x and similar values are changed in OnPreLayout,
--- the natural center reaches (0.8, 0.3) on the canvas when there are no individual/3D/Deform transforms
-local geometry = character.geometry
-character.offset_x, character.offset_y = mt.layout.canvas_to_offset(
-    ctx.global, ctx.canvas.width, ctx.canvas.height,
-    geometry.bounds_center_x, geometry.bounds_center_y,
-    0.8, 0.3
-)
-```
-
-##### Notes
-
-For a part, the part’s own transform (`part.offset_x/y`, etc.) is applied **inside** the [resolved transform of its owning character](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-inheritance).
-Therefore, this function cannot place a part at a fixed canvas position while ignoring the character transform; if the character itself moves, the part moves with it.
-To place a part at a fixed canvas position independently of the character transform, first inspect the character’s `offset_x/y` / `rotation` / `scale` and other values, then separately apply their inverse transform to the part’s displacement.
-
-#### `mt.layout.set_canvas_position(item, canvasX, canvasY, ctx?)` `Deprecated`
-
-API level: `1+`
-
-> [!CAUTION]
-> This is an API Level 1 compatibility function. It does not invert a part’s owning-character hierarchy or the target’s own transforms.
-> Use `mt.layout.place_2d` in new code.
-
-A helper that writes the `offset_x/y` corresponding to a specified canvas target position `(canvasX, canvasY)` to a character object (`ctx.chars[i]`) or part object (`ctx.parts[i]`).
-
-It uses `geometry.bounds_center_x/y` as the natural center for characters and `geometry.canvas_center_x/y` for parts.
-Passing `ctx` as the fourth argument inverts only the same 2D Global transform as `canvas_to_offset`.
-Because it does not invert the owning-character transform of a part, 3D, camera, projection, or Deform, it does not guarantee the final screen position when these are active.
-When `ctx` is omitted, the natural center matches the target canvas position only when Global is the identity transform.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `item` | `table` | — | Required | Target character or part |
-| `canvasX` / `canvasY` | `number` | canvas normalized position | Required | Destination coordinates |
-| `ctx` | `table` | — | `nil` | If specified, inverts only the 2D transform of `ctx.global` |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | canvas normalized displacement | The assigned `offsetX` |
-| `number` | canvas normalized displacement | The assigned `offsetY` |
-
-##### Changes
-
-Directly updates the target’s `offset_x` and `offset_y`.
-
-##### Example
-
-```lua
--- Move the character's natural center to the upper-right of the 2D screen (0.8, 0.8)
-mt.layout.set_canvas_position(ctx.chars[1], 0.8, 0.8, ctx)
-
--- Move the part's natural center to the center of the screen when its parent character and Global are identity
-mt.layout.set_canvas_position(ctx.parts[1], 0.5, 0.5)
-```
-
-#### `mt.layout.group_bounds(ctx, targets, targetType?)` `Deprecated`
-
-API level: `1+`
-
-> [!CAUTION]
-> This is an API Level 1 compatibility function. It returns an approximation that excludes rotation, pivot, parent characters, and Global.
-> Use `mt.layout.measure_bounds_2d` in new code.
-
-Returns **approximate axis-aligned bounds at an intermediate transform stage** for the specified characters or parts.
-
-It applies only each element’s `offset_x/y`, `scale`, and `stretch_x/y` to its natural ink bounds.
-It does not account for the element’s rotation/pivot, a part’s owning-character transform, `ctx.global`, 3D, camera, projection, or Deform.
-It can therefore be used for supporting calculations in 2D layouts with no rotation or hierarchical/Global transforms, but does not guarantee final rendered bounds, physical bounds, or collision detection.
-The public API does not provide a function for obtaining final projected path bounds.
-Call it after writing the target elements’ offset/scale/stretch.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Layout context |
-| `targets` | `table` | — | Required | Array of 1-based target indices |
-| `targetType` | `string` | — | `"character"` | `"character"` or `"part"` |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | Approximate bounds |
-| `nil` | — | If there are no valid targets |
-
-The bounds table has the following fields.
-
-| Field | Type | Unit | Description |
-|---|---|---|---|
-| `left` / `right` / `bottom` / `top` | `number` | canvas normalized position | Approximate bounds at the transform stage described above |
-| `center_x` / `center_y` | `number` | canvas normalized position | Center of the group |
-| `width` / `height` | `number` | canvas normalized displacement | Width and height of the entire group |
-
-##### Example
-
-```lua
--- Get the bounds of the entire parent-character group at indices 1–3
-local bounds = mt.layout.group_bounds(ctx, {1, 2, 3})
-if bounds then
-    -- Use the center coordinates, width, and height of the whole group to place a background plate or ruby text
-    print(bounds.center_x, bounds.center_y, bounds.width, bounds.height)
-end
-```
-
-#### `mt.timeline.intro_outro(progress, introFraction, outroFraction)` `Deprecated`
-
-API level: `1+`
-
-Separately extracts and returns progress for the first interval (intro) and last interval (outro) from the overall progress.
-
-> [!WARNING]
-> **Deprecated**: Percentage-based transitions expand or contract in proportion to clip length, so lengthening the clip makes the fade occur in slow motion.
-> Use the fixed-speed `mt.timeline.intro_outro_seconds` instead
-> (see the design rules for [`ctx.timeline`](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/02_ctx_reference#section-timeline)).
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `progress` | `number` | 0–1 | Required | Overall progress. Normally obtained from `mt.timeline.progress` |
-| `introFraction` | `number` | 0–1 | Required | Fraction of the overall duration treated as the intro |
-| `outroFraction` | `number` | 0–1 | Required | Fraction of the overall duration treated as the outro |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | `introProgress`. Intro progress |
-| `number` | 0–1 | `outroProgress`. Outro progress |
