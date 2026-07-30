@@ -130,6 +130,21 @@ ON AN "AS IS" BASIS, AND THE COPYRIGHT HOLDER HAS NO OBLIGATION TO
 PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 ```
 
+## mediabunny 1.52.0 (Mozilla Public License 2.0)
+
+Used to multiplex recorded frames into a WebM file.
+
+Copyright (c) Vanilagy and contributors.
+
+This component is covered by the Mozilla Public License, Version 2.0, a
+copy of which is distributed in `licenses/MPL-2.0.txt` and is also
+available at https://mozilla.org/MPL/2.0/.
+
+mediabunny is used in unmodified form. Its Source Code Form, as defined by
+the license, is published at https://github.com/Vanilagy/mediabunny and is
+also available from the npm registry at
+https://registry.npmjs.org/mediabunny/-/mediabunny-1.52.0.tgz.
+
 ## Google Material Icons (Apache License 2.0)
 
 The simulator UI contains inline SVG paths adapted from Google Material
