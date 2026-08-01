@@ -2,9 +2,9 @@
      Prose sections come from scripting/ai-preamble.md; reference tables come from
      scripting/api-schema.json. Edit those sources instead. -->
 
-Lua 5.4 for the Mug Typography plugin. Complete contract for `ctx`: every field,
-unit, direction, reference point. Read section 1 first — most failures are units,
-direction or reference point, not syntax.
+Target API level: **6**. Lua 5.4 for the Mug Typography plugin. Complete contract
+for `ctx`: every field, unit, direction, reference point. Read section 1 first —
+most failures are units, direction or reference point, not syntax.
 
 ## 0. How to use this file
 
@@ -35,7 +35,7 @@ Samples ship in the plugin's distribution ZIP — `samples/reference/` (one
 concept each) and `samples/showcase/` (complete effects). Imitate a nearby
 sample's structure instead of inventing a style.
 
-## 1. The five rules that break most scripts
+## 1. The six rules that break most scripts
 
 **1. `ctx` is rebuilt from Inspector values every frame. Accumulation does not work.**
 
@@ -44,9 +44,9 @@ ctx.global.rotation = ctx.global.rotation + 1.0   -- WRONG: always Inspector + 1
 ctx.global.rotation = ctx.time * 20.0             -- RIGHT: derived from time
 ```
 
-Every frame must be computable from `ctx.time` alone. The host evaluates frames
-out of order (scrubbing, reverse playback, cache, parallel render), so never
-carry state between frames.
+Every frame must be computable from its current inputs alone. The host evaluates
+frames out of order (scrubbing, reverse playback, cache, parallel render), so
+never carry state between frames.
 
 **2. Offsets and pivots are displacements with neutral `0.5`, not positions.**
 
@@ -94,6 +94,12 @@ ctx.global.shadow.distance = 1.2    -- RIGHT: 1.2% of short side (useful range 0
 **5. An error anywhere in a callback discards every change that callback made.**
 There is no partial application. A failed `OnPreLayout` also skips `OnLayout`
 and `OnPath`.
+
+**6. Fixed-duration intro/outro transitions use real-time seconds.** Use
+`mt.timeline.intro_outro_seconds` or `mt.timeline.remaining` when animation speed
+must not stretch with clip length. Use clip fractions only when intentionally
+proportional to clip length. Requested intro/outro durations are compressed only
+when their sum exceeds the clip duration.
 
 ## 2. Callbacks
 
@@ -345,6 +351,9 @@ recognised (`@mt` / `@mug` also work).
 -- @api_level 6
 ```
 
+New scripts should declare the current target API level so unsupported plugin
+versions reject them instead of failing at runtime.
+
 `@recommend` sets initial Inspector values. Use it **only** when the effect needs
 specific conditions; do not pin text, position or background otherwise, because
 it becomes unclear whether an on-screen result came from the script or the
@@ -357,7 +366,7 @@ preset.
 | `@recommend text "<string>"` | Quoted; `\n` is a newline |
 | `@recommend lang <code>` | Picks a font for that language, e.g. `ja`. Inferred from `text` when omitted |
 
-## 10. Recipes for three problems that are easy to get wrong
+## 10. Recipes for common problems
 
 **Advance after per-character scale.** Changing `scale` does not change the
 advance, so scaled characters overlap or leave gaps. Call `mt.layout.reflow(ctx)`
@@ -401,13 +410,33 @@ function OnLayout(ctx)
 end
 ```
 
+**Time-anchored staggered intro/outro.** `mt.each_char` supplies filtering,
+ordering and normalized `info.progress`; a numeric loop remains appropriate for
+a simple full traversal. Seed random ordering with `ctx.meta.instance_seed` so
+different clip instances do not repeat the same pattern.
+
+```lua
+function OnLayout(ctx)
+    local intro, outro = mt.timeline.intro_outro_seconds(ctx, 0.5, 0.5)
+    local options = { order = "random", seed = ctx.meta.instance_seed }
+    for _, character, info in mt.each_char(ctx, options) do
+        local enter = mt.ease.out_cubic(
+            mt.stagger_progress(intro, info.progress, 0.3))
+        local leave = mt.ease.in_cubic(
+            mt.stagger_progress(outro, info.progress, 0.3))
+        character.offset_y = character.offset_y + (1.0 - enter) * 0.15 - leave * 0.15
+        character.opacity = character.opacity * enter * (1.0 - leave)
+    end
+end
+```
+
 ## 11. Checklist before returning a script
 
 Verify each item against the field tables below. These are the failures seen most
 often in generated scripts.
 
-1. Every animated value derives from `ctx.time` — no accumulation, no state kept
-   between frames, no reliance on evaluation order.
+1. Every animated value derives only from current-frame inputs — no accumulation,
+   state kept between frames, or reliance on evaluation order.
 2. Every field you wrote is writable **in the callback you wrote it in** (check
    its `W:` phases). Writing `ctx.global` from `OnLayout` is an error, not a
    silent no-op.
@@ -418,11 +447,16 @@ often in generated scripts.
    `mt.polar_offset_2d`.
 5. `shadow.distance` is a short-side percentage, not a canvas fraction — a
    visible shadow is normally around 0.8–2.0, not 0.0x.
-6. Loops use `ctx.char_count` / `ctx.part_count` and are 1-based.
+6. Loops use 1-based `ctx.char_count` / `ctx.part_count` or the `mt.each_char` /
+   `mt.each_part` iterators.
 7. Individual colors are paired with `use = true`.
 8. `ctx.paths` and `path` members are called with a colon.
 9. No `mt.*` call relies on a guessed default, string value, or table shape
    (section 0).
+10. Fixed-duration intro/outro transitions use `mt.timeline.intro_outro_seconds`
+    or `mt.timeline.remaining`; clip fractions are intentional when used.
+11. No API marked `DEPRECATED` is used; its documented replacement is used.
+12. A complete new script declares `-- @api_level 6` in its metadata header.
 
 State any assumption you had to make, and name any documentation you needed but
 were not given.
