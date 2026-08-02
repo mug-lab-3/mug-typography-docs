@@ -8,8 +8,19 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#252526">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="web-main.css">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch((err) => {
+        console.warn('Service Worker registration failed:', err);
+      });
+    });
+  }
+</script>
 <style>
   html, body { height: 100%; }
   .web-page { display: flex; flex-direction: column; height: 100vh; }
