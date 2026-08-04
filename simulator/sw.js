@@ -1,4 +1,4 @@
-const CACHE_NAME = "mt-sim-407e1ee25b345739";
+const CACHE_NAME = "mt-sim-584189f7bd4303c8";
 const PRECACHE_URLS = [
   "./",
   "apple-touch-icon.png",
@@ -140,9 +140,10 @@ const PRECACHE_URLS = [
   "style-1b4607e9bfdd.css",
   "third-party-notices.md",
   "web-main-EZTS765H.css",
-  "web-main-G5EMVSYZ.js"
+  "web-main-RKQHN6RK.js"
 ];
 const DEVELOPMENT = false;
+const BUILD_ID = "6674cc1a6e36b58e";
 const CACHE_PREFIX = "mt-sim-";
 const kPrecacheBatchSize = 8;
 
@@ -180,6 +181,8 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
+  } else if (event.data?.type === "GET_BUILD_ID") {
+    event.ports[0]?.postMessage({ buildId: BUILD_ID });
   }
 });
 

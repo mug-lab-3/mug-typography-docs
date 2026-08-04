@@ -10,6 +10,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#252526">
+<meta name="mt-simulator-build" content="6674cc1a6e36b58e">
 <link rel="stylesheet" href="style-1b4607e9bfdd.css">
 <link rel="stylesheet" href="web-main-EZTS765H.css">
 <script>
@@ -20,9 +21,37 @@
       const observedWorkers = new WeakSet();
       const updateNotice = document.getElementById('app-update-notice');
       const updateButton = document.getElementById('app-update-button');
+      const pageBuildId = document.querySelector('meta[name="mt-simulator-build"]')?.content;
+      const workerBuildIdTimeoutMs = 1500;
       const showUpdate = (worker) => {
         waitingWorker = worker;
         updateNotice.hidden = false;
+      };
+      const readWorkerBuildId = (worker) => new Promise((resolve) => {
+        const channel = new MessageChannel();
+        const finish = (buildId) => {
+          window.clearTimeout(timeout);
+          channel.port1.close();
+          resolve(buildId);
+        };
+        const timeout = window.setTimeout(() => finish(undefined), workerBuildIdTimeoutMs);
+        channel.port1.addEventListener('message', (event) => {
+          finish(event.data?.buildId);
+        }, { once: true });
+        channel.port1.start();
+        worker.postMessage({ type: 'GET_BUILD_ID' }, [channel.port2]);
+      });
+      const handleInstalledWorker = async (worker) => {
+        if (!navigator.serviceWorker.controller) {
+          worker.postMessage({ type: 'SKIP_WAITING' });
+          return;
+        }
+        const workerBuildId = await readWorkerBuildId(worker);
+        if (pageBuildId !== undefined && workerBuildId === pageBuildId) {
+          worker.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+          showUpdate(worker);
+        }
       };
 
       navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -47,16 +76,12 @@
             if (worker.state !== 'installed') {
               return;
             }
-            if (navigator.serviceWorker.controller) {
-              showUpdate(worker);
-            } else {
-              worker.postMessage({ type: 'SKIP_WAITING' });
-            }
+            void handleInstalledWorker(worker);
           });
         };
 
         if (registration.waiting) {
-          showUpdate(registration.waiting);
+          void handleInstalledWorker(registration.waiting);
         }
         if (registration.installing) {
           observeInstallingWorker(registration.installing);
@@ -910,6 +935,6 @@
     <div class="doc-viewer-body" id="webmcp-guide-body" style="padding: 16px; line-height: 1.6; font-size: 13px; color: #d4d4d4;"></div>
   </div>
 </div>
-<script type="module" src="web-main-G5EMVSYZ.js"></script>
+<script type="module" src="web-main-RKQHN6RK.js"></script>
 </body>
 </html>
