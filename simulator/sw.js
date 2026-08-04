@@ -1,4 +1,4 @@
-const CACHE_NAME = "mt-sim-0b25a2584e966afc";
+const CACHE_NAME = "mt-sim-407e1ee25b345739";
 const PRECACHE_URLS = [
   "./",
   "apple-touch-icon.png",
@@ -140,7 +140,7 @@ const PRECACHE_URLS = [
   "style-1b4607e9bfdd.css",
   "third-party-notices.md",
   "web-main-EZTS765H.css",
-  "web-main-O3XFCN5B.js"
+  "web-main-G5EMVSYZ.js"
 ];
 const DEVELOPMENT = false;
 const CACHE_PREFIX = "mt-sim-";

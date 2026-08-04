@@ -76,29 +76,83 @@
   html, body { height: 100%; }
   .web-page { display: flex; flex-direction: column; height: 100vh; }
   .app-update-notice {
+    box-sizing: border-box;
     position: fixed;
     z-index: 10000;
     right: 16px;
     bottom: 16px;
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    color: #f3f3f3;
-    background: #252526;
-    border: 1px solid #555;
-    border-radius: 4px;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
-    font: 13px/1.4 sans-serif;
+    gap: 11px;
+    width: min(430px, calc(100vw - 32px));
+    padding: 14px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--mt-accent) 45%, transparent);
+    border-radius: 12px;
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--mt-accent) 13%, transparent),
+        transparent 58%
+      ),
+      color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) 94%, transparent);
+    box-shadow:
+      0 16px 40px rgb(0 0 0 / 42%),
+      0 1px 0 rgb(255 255 255 / 6%) inset;
+    color: var(--vscode-foreground, #ddd);
+    font: 12px/1.45 var(--vscode-font-family, sans-serif);
+    backdrop-filter: blur(18px);
   }
   .app-update-notice[hidden] { display: none; }
-  .app-update-notice button {
-    padding: 5px 10px;
+  .app-update-notice::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--mt-accent), #7c3aed, transparent);
+    content: "";
+  }
+  .app-update-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--mt-accent) 18%, transparent);
+    color: var(--mt-accent);
+  }
+  .app-update-icon svg { width: 17px; height: 17px; }
+  .app-update-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .app-update-copy strong { color: var(--vscode-foreground, #eee); font-size: 13px; }
+  .app-update-copy span { color: var(--vscode-descriptionForeground, #aaa); }
+  .app-update-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 6px 11px;
+    border: 1px solid color-mix(in srgb, var(--mt-accent) 65%, transparent);
+    border-radius: 6px;
+    background: var(--mt-accent);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--mt-accent) 28%, transparent);
     color: #fff;
-    background: #0e639c;
-    border: 0;
-    border-radius: 2px;
+    font: inherit;
+    font-weight: 600;
+    white-space: nowrap;
     cursor: pointer;
+  }
+  .app-update-button svg { width: 13px; height: 13px; }
+  .app-update-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+  .app-update-button:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder, #007fd4);
+    outline-offset: 2px;
+  }
+  @media (max-width: 520px) {
+    .app-update-notice { grid-template-columns: auto minmax(0, 1fr); }
+    .app-update-button { grid-column: 1 / -1; justify-content: center; width: 100%; }
   }
 
   .app-bar {
@@ -638,10 +692,32 @@
 </style>
 </head>
 <body>
-<div id="app-update-notice" class="app-update-notice" role="status" hidden>
-  <span>新しいバージョンを利用できます / An update is available.</span>
-  <button id="app-update-button" type="button">更新 / Reload</button>
-</div>
+<aside
+  id="app-update-notice"
+  class="app-update-notice"
+  role="status"
+  aria-live="polite"
+  aria-labelledby="app-update-title"
+  aria-describedby="app-update-message"
+  hidden
+>
+  <span class="app-update-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path>
+      <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path>
+    </svg>
+  </span>
+  <span class="app-update-copy">
+    <strong id="app-update-title" data-i18n="update.title">Online simulator update ready</strong>
+    <span id="app-update-message" data-i18n="update.message">Reload the online simulator to switch to its latest version.</span>
+  </span>
+  <button id="app-update-button" class="app-update-button" type="button">
+    <span id="app-update-button-label" data-i18n="update.reload">Update simulator</span>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+      <path d="m6 3 5 5-5 5"></path>
+    </svg>
+  </button>
+</aside>
 <div class="web-page">
   <div class="app-bar">
     <button
@@ -834,6 +910,6 @@
     <div class="doc-viewer-body" id="webmcp-guide-body" style="padding: 16px; line-height: 1.6; font-size: 13px; color: #d4d4d4;"></div>
   </div>
 </div>
-<script type="module" src="web-main-O3XFCN5B.js"></script>
+<script type="module" src="web-main-G5EMVSYZ.js"></script>
 </body>
 </html>
