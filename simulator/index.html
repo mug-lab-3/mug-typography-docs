@@ -10,13 +10,64 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#252526">
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="web-main.css">
+<link rel="stylesheet" href="style-1b4607e9bfdd.css">
+<link rel="stylesheet" href="web-main-EZTS765H.css">
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch((err) => {
-        console.warn('Service Worker registration failed:', err);
+      let waitingWorker;
+      let reloadForUpdate = false;
+      const observedWorkers = new WeakSet();
+      const updateNotice = document.getElementById('app-update-notice');
+      const updateButton = document.getElementById('app-update-button');
+      const showUpdate = (worker) => {
+        waitingWorker = worker;
+        updateNotice.hidden = false;
+      };
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloadForUpdate) {
+          window.location.reload();
+        }
+      });
+      updateButton.addEventListener('click', () => {
+        if (waitingWorker) {
+          reloadForUpdate = true;
+          waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((registration) => {
+        const observeInstallingWorker = (worker) => {
+          if (observedWorkers.has(worker)) {
+            return;
+          }
+          observedWorkers.add(worker);
+          worker.addEventListener('statechange', () => {
+            if (worker.state !== 'installed') {
+              return;
+            }
+            if (navigator.serviceWorker.controller) {
+              showUpdate(worker);
+            } else {
+              worker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        };
+
+        if (registration.waiting) {
+          showUpdate(registration.waiting);
+        }
+        if (registration.installing) {
+          observeInstallingWorker(registration.installing);
+        }
+        registration.addEventListener('updatefound', () => {
+          if (registration.installing) {
+            observeInstallingWorker(registration.installing);
+          }
+        });
+      }).catch((error) => {
+        console.warn('Service Worker registration failed:', error);
       });
     });
   }
@@ -24,6 +75,31 @@
 <style>
   html, body { height: 100%; }
   .web-page { display: flex; flex-direction: column; height: 100vh; }
+  .app-update-notice {
+    position: fixed;
+    z-index: 10000;
+    right: 16px;
+    bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    color: #f3f3f3;
+    background: #252526;
+    border: 1px solid #555;
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+    font: 13px/1.4 sans-serif;
+  }
+  .app-update-notice[hidden] { display: none; }
+  .app-update-notice button {
+    padding: 5px 10px;
+    color: #fff;
+    background: #0e639c;
+    border: 0;
+    border-radius: 2px;
+    cursor: pointer;
+  }
 
   .app-bar {
     display: flex;
@@ -562,6 +638,10 @@
 </style>
 </head>
 <body>
+<div id="app-update-notice" class="app-update-notice" role="status" hidden>
+  <span>新しいバージョンを利用できます / An update is available.</span>
+  <button id="app-update-button" type="button">更新 / Reload</button>
+</div>
 <div class="web-page">
   <div class="app-bar">
     <button
@@ -661,6 +741,10 @@
       <span data-i18n-text>API Reference</span>
       <svg class="app-menu-external" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h6V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6h-2v6z"/></svg>
     </button>
+    <button id="open-webmcp-guide-button" type="button" role="menuitem" data-i18n="menu.webmcpGuide">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+      <span data-i18n-text>AI Integration Guide</span>
+    </button>
     <button id="download-ai-reference-button" type="button" role="menuitem" data-i18n="menu.downloadAiReference">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3zM4 19h16v2H4v-2z"/></svg>
       <span data-i18n-text>Download AI API Reference</span>
@@ -741,6 +825,15 @@
     <div class="doc-viewer-body" id="licenses-viewer-body"></div>
   </div>
 </div>
-<script type="module" src="web-main.js"></script>
+<div class="doc-viewer-overlay" id="webmcp-guide-overlay">
+  <div class="doc-viewer-panel">
+    <div class="doc-viewer-header">
+      <strong data-i18n="overlay.webmcpGuide">WebMCP Integration Guide</strong>
+      <button id="close-webmcp-guide-button" class="overlay-close-button" type="button" aria-label="Close" title="Close">✕</button>
+    </div>
+    <div class="doc-viewer-body" id="webmcp-guide-body" style="padding: 16px; line-height: 1.6; font-size: 13px; color: #d4d4d4;"></div>
+  </div>
+</div>
+<script type="module" src="web-main-O3XFCN5B.js"></script>
 </body>
 </html>
