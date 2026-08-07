@@ -67,8 +67,17 @@ on purpose: positions follow math (Y up), angles follow screen intuition.
 
 - `offset_y`, `position_y` larger → moves **up**
 - `rotation`, `gradient.angle`, `shadow.angle` positive → rotates **clockwise**
+- `rotation = 90` turns what pointed **up** so it points **right** (12 o'clock →
+  3 o'clock). Under the Y-up mathematical convention the same value would turn it
+  **left**, so an angle derived that way needs its sign flipped
 - `shadow.angle = 90` points **straight down**, not up
 - `z` positive → **away** from the camera (deeper)
+
+Check a rotation sign against the clock face, not against the Y axis. A shape
+hanging **down** (6 o'clock) swings **left** under a positive `rotation`, because
+6 o'clock advances toward 7 and 8 — the direction that reads as leftward on
+screen. Positions and rotations disagreeing here is the single most common sign
+error in scripts.
 
 To turn an angle into an offset vector, use `mt.polar_offset_2d`, which converts
 between the two conventions for you:
@@ -736,7 +745,7 @@ ctx.global.position_y : number [R:pre,layout,path W:pre]
     Global Y position; 0.5 is the canvas center and values grow upward.
 ctx.global.rotation : number [R:pre,layout,path W:pre]
     unit=degrees  neutral=0  axis=clockwise_positive
-    Global rotation in degrees.
+    Global rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
 ctx.global.yaw : number [R:pre,layout,path W:pre]
     unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
     Global yaw in degrees; used by the 3D preset.
@@ -906,7 +915,7 @@ ctx.chars[i].stretch_y : number [R:layout,path W:layout]
     Vertical character stretch.
 ctx.chars[i].rotation : number [R:layout,path W:layout]
     unit=degrees  neutral=0  axis=clockwise_positive
-    Character rotation in degrees.
+    Character rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
 ctx.chars[i].z : number [R:layout,path W:layout]
     unit=canvas_ratio_length  neutral=0  axis=z_into_screen  base=positive = deeper/away from camera
     Character Z position.
@@ -988,7 +997,7 @@ ctx.parts[i].scale : number [R:layout,path W:layout]
     Uniform part scale.
 ctx.parts[i].rotation : number [R:layout,path W:layout]
     unit=degrees  neutral=0  axis=clockwise_positive
-    Part rotation in degrees.
+    Part rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
 ctx.parts[i].stretch_x : number [R:layout,path W:layout]
     unit=multiplier  neutral=1  base=horizontal
     Horizontal part stretch.
