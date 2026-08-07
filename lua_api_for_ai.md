@@ -178,6 +178,70 @@ character.pivot_y = 0.5 + geometry.bounds_height * 0.5   -- top edge
 character.pivot_x = 0.5 - geometry.bounds_width  * 0.5   -- left edge
 ```
 
+> [!IMPORTANT]
+> **Moving an item never requires moving its pivot.** `offset_*` is applied
+> outside the rotation, so the pivot travels with the item automatically and the
+> item keeps spinning about itself no matter how far it has moved. Leave the
+> pivot at its neutral `0.5` unless you specifically want to rotate about some
+> *other* point.
+>
+> Because `offset_*` and `pivot_*` share a unit and a neutral value, adding the
+> same displacement to both looks plausible and is a common mistake. It gives the
+> rotation a lever arm, and the item swings around a distant point — a
+> **thrown fragment stops following its arc and orbits instead**:
+>
+> ```lua
+> -- WRONG: the pivot is dragged away from the part, so rotation orbits it
+> part.pivot_x = part.pivot_x + flight.x
+> part.pivot_y = part.pivot_y + flight.y
+> part.offset_x = part.offset_x + flight.x
+> part.offset_y = part.offset_y + flight.y
+>
+> -- CORRECT: leave the pivot alone; the part turns about itself while it flies
+> part.offset_x = part.offset_x + flight.x
+> part.offset_y = part.offset_y + flight.y
+> part.rotation = part.rotation + flight.rotation
+> ```
+>
+> If something travels in a circle when you expected a straight line or an arc,
+> check for a written pivot first.
+
+### Transform composition order
+
+Each level composes its own fields in a fixed order. Reading it left to right,
+the rightmost transform is applied to the geometry first:
+
+```text
+T(natural position) · T(offset) · T(pivot) · R(rotation) · Yaw · Pitch · S(scale · stretch) · T(-pivot)
+```
+
+(At the character level the natural bounds center is folded into the pivot term,
+since that is the reference point `character.pivot_*` is measured from.)
+
+Three consequences follow, and they explain most "why did it move like that"
+surprises:
+
+- **`offset_*` sits outside the rotation.** Translation is never rotated, and the
+  pivot is carried along with the item. Moving something does not require
+  touching its pivot.
+- **`pivot_*` only matters when it is non-neutral.** It is subtracted at the end
+  and added back before the rotation, so at `0.5` the two cancel and the item
+  rotates and scales about itself. A non-neutral pivot is a lever arm for
+  *every* rotation and scale at that level, not just the one you had in mind.
+- **`scale` and `stretch_*` are applied inside the rotation**, so they act along
+  the item's own axes after it has been rotated, not along the canvas axes.
+
+The same order applies whether or not 3D projection is enabled; the 3D path adds
+`yaw` / `pitch` and the `z` offset at the same point in the chain. The levels
+nest outward — a part is composed inside its character, and the character inside
+`global` — so each level's pivot and rotation apply to everything beneath it.
+
+The only field that deliberately couples the two is
+`mt.layout.pivot_at_2d`, which moves a pivot *and* corrects `offset_*` so the
+current pose does not shift. That correction exists because **changing a pivot
+moves the item**; the reverse is not true, and changing an offset never requires
+a pivot correction.
+
 ### Angles in detail
 
 - **2D `rotation`** — positive is clockwise.
@@ -245,6 +309,43 @@ current values.
 ```lua
 ctx.global.shadow = { enabled = true, distance = 1.2 }   -- other shadow fields unchanged
 ```
+
+### Respect the inspector
+
+Every writable field starts at the value the user set in the inspector, and
+writing one replaces that choice. Write what the animation drives; read what it
+only needs a value from. A field assigned a constant every frame is a control
+taken away from the user — not because the effect was too bold, but because it
+was never animating that field in the first place.
+
+```lua
+-- WRONG: the inspector's gradient color no longer does anything
+ctx.global.gradient.end_color = { r = 1.0, g = 0.46, b = 0.14, a = 1.0 }
+
+-- CORRECT: animate the position, read the color the user chose
+ctx.global.gradient.start_position = heatEdge
+local glowColor = ctx.global.gradient.end_color
+```
+
+`ctx.global.fill.color`, `ctx.global.gradient.end_color`, and
+`mt.color.resolve_fill` for a character or part all report resolved values, so an
+effect can build on the user's palette instead of restating a literal. For a
+value you only want to nudge, accumulate onto the current one:
+`ctx.global.tracking = ctx.global.tracking - strain * 0.05`.
+
+Layout is where this bites hardest, because `global.scale`, `tracking`,
+`line_spacing`, `h_align` / `v_align` and `margins` all move the glyphs before
+the script runs. Anything that places, aligns, or spaces characters should
+measure — `mt.layout.measure_bounds_2d`, `geometry.*`, and the canvas-normalized
+`ctx.font.ascent` / `descent` / `line_height` — rather than assume a scale.
+(`ctx.font.units_per_em` is in font design units: a conversion factor, not a
+distance.) A distance meant to stay proportional to the glyphs belongs in those
+terms too, since a canvas fraction is fixed while a font metric is not.
+
+When per-character `scale` or `stretch_*` is what moved the glyphs, call
+`mt.layout.reflow(ctx)` instead of computing advances by hand. It re-typesets
+from the real origins under the current scale and stretch, keeping the user's
+tracking and the shaped spacing that hand-rolled math tends to drop.
 
 ## 6. Syntax that the field tables cannot show
 
@@ -386,7 +487,9 @@ coordinates. They are ratios along the `angle` direction across the bounding box
 of the whole text *after* transforms. `0.0`/`1.0` spans edge to edge; `0.2`/`0.8`
 starts 20% inward from each edge. `angle = 0` is left-to-right, `90` is
 top-to-bottom, `-90` (or `270`) is bottom-to-top. The fill color sits at the
-`start_position` end and `end_color` at the `end_position` end. Under 3D the box
+`start_position` end and `end_color` at the `end_position` end. Setting
+`start_position` greater than `end_position` reverses the ramp, which is
+equivalent to rotating `angle` by 180 degrees. Under 3D the box
 is measured on the layout plane, so camera moves do not shift the gradient.
 
 **Passing values between callbacks.** A file-scope `local` may carry a value from
@@ -456,7 +559,11 @@ often in generated scripts.
 10. Fixed-duration intro/outro transitions use `mt.timeline.intro_outro_seconds`
     or `mt.timeline.remaining`; clip fractions are intentional when used.
 11. No API marked `DEPRECATED` is used; its documented replacement is used.
-12. A complete new script declares `-- @api_level 6` in its metadata header.
+12. Every field written is one the animation drives; values it only needs are
+    read, not overwritten. Placement and spacing come from measured values, and
+    per-character `scale` / `stretch_*` is followed by `mt.layout.reflow`
+    (section 5).
+13. A complete new script declares `-- @api_level 6` in its metadata header.
 
 State any assumption you had to make, and name any documentation you needed but
 were not given.
@@ -2658,6 +2765,22 @@ part.offset_x = 0.5 + flight.x
 part.offset_y = 0.5 + flight.y
 part.rotation = flight.rotation
 ```
+
+##### Keeping the arc readable
+
+The returned `x` / `y` are always a true parabola. When a flight *looks* wrong,
+the trajectory is rarely the cause — something layered on top of it is:
+
+- **Do not touch `pivot_*`.** Leave it at `0.5`. Adding the flight displacement
+  to the pivot as well makes the fragment orbit a distant point instead of
+  following its arc. See "Pivot reference points".
+- **Keep the tumble bounded.** `spin` does not bend the path, but a fragment
+  turning several times per second reads as rolling in place and hides the arc.
+  For 3D `yaw` / `pitch`, prefer a *total* angle that eases to a settled attitude
+  over a rate multiplied by elapsed time, which accumulates without limit.
+- **A purely radial throw barely arcs.** On a single line of text the outward
+  direction is nearly horizontal, so there is little rise to fall back from.
+  Blend the direction toward straight up (`-90`) to give the debris real lift.
 
 #### `mt.friction_decay(t, speed, friction)`
 
