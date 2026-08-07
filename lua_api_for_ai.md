@@ -1519,95 +1519,65 @@ start from Index by Purpose when you only know the goal. Do not read end to end.
 
 ### Index by Purpose
 
-| Purpose | API |
-|---|---|
-| Value constraints and range mapping | `mt.clamp` / `mt.saturate` / `mt.remap` / `mt.wrap` |
-| Interpolation and keyframes | `mt.lerp` / `mt.inverse_lerp` / `mt.lerp_angle` / `mt.smoothstep` / `mt.keyframes` |
-| Progress distribution | `mt.distribute` / `mt.stagger` / `mt.stagger_progress` / `mt.stagger_pattern` |
-| Distance-based influence | `mt.falloff` |
-| Deterministic random values and noise | `mt.random` / `mt.random_range` / `mt.noise1` / `mt.noise2` / `mt.wiggle` |
-| Cycles and springs | `mt.cycle` / `mt.pingpong` / `mt.wave` / `mt.wave_square` / `mt.wave_triangle` / `mt.wave_sawtooth` / `mt.spring` |
-| Displacement from polar coordinates | `mt.polar_offset_2d` |
-| Physical motion | `mt.bounce_y` / `mt.bounce_x` / `mt.bounce_ground` / `mt.bounce_wall` / `mt.impact_squash` / `mt.projectile_2d` / `mt.friction_decay` |
-| Color | `mt.color.resolve_fill` / `mt.color.lerp` / `mt.color.from_hsv` / `mt.color.with_alpha` / `mt.color.from_oklch` |
-| Easing | `mt.ease.*` |
-| Reflow and line-based grouping | `mt.layout.reflow` / `mt.layout.group_by_line` |
-| Canvas position, distance, and pivot | `mt.layout.place_2d` / `mt.layout.get_canvas_position_2d` / `mt.layout.canvas_to_offset_2d` / `mt.layout.radial_distance` / `mt.layout.pivot_at_2d` |
-| Bounds after 2D transforms | `mt.layout.measure_bounds_2d` |
-| Alignment on paths | `mt.layout.queue_on_path` |
-| Motion paths | `mt.path.bezier` / `mt.path.catmull_rom` / `mt.path.arc_length` |
-| Path creation and editing | `mt.svg_path` / `path:*` |
-| UTF-8 text processing | `mt.text.slice` / `mt.text.classify` |
-| Clip time | `mt.timeline.progress` / `mt.timeline.duration` / `mt.timeline.remaining` / `mt.timeline.intro_outro_seconds` / `mt.timeline.window_progress` / `mt.timeline.window_ctx` / `mt.timeline.chain` |
+- Value constraints and range mapping : `mt.clamp` / `mt.saturate` / `mt.remap` / `mt.wrap`
+- Interpolation and keyframes : `mt.lerp` / `mt.inverse_lerp` / `mt.lerp_angle` / `mt.smoothstep` / `mt.keyframes`
+- Progress distribution (domino, cascade, typewriter) : `mt.distribute` / `mt.stagger` / `mt.stagger_progress` / `mt.stagger_pattern`
+- Distance-based influence (wavefront, shine, ripple, shockwave) : `mt.falloff`
+- Deterministic random values and noise (scatter, camera shake, tremor) : `mt.random` / `mt.random_range` / `mt.noise1` / `mt.noise2` / `mt.wiggle`
+- Cycles and springs (floating, harmonic wave, damped oscillation) : `mt.cycle` / `mt.pingpong` / `mt.wave` / `mt.wave_square` / `mt.wave_triangle` / `mt.wave_sawtooth` / `mt.spring`
+- Displacement from polar coordinates (radial scatter, orbit, explosion) : `mt.polar_offset_2d`
+- Physical motion (ballistic trajectory, ground bounce, friction decay) : `mt.bounce_y` / `mt.bounce_x` / `mt.bounce_ground` / `mt.bounce_wall` / `mt.impact_squash` / `mt.projectile_2d` / `mt.friction_decay`
+- Color (hue shift, interpolation, perceptually uniform) : `mt.color.resolve_fill` / `mt.color.lerp` / `mt.color.from_hsv` / `mt.color.with_alpha` / `mt.color.from_oklch`
+- Easing : `mt.ease.*`
+- Reflow and line-based grouping : `mt.layout.reflow` / `mt.layout.group_by_line`
+- Canvas position, distance, and pivot : `mt.layout.place_2d` / `mt.layout.get_canvas_position_2d` / `mt.layout.canvas_to_offset_2d` / `mt.layout.radial_distance` / `mt.layout.pivot_at_2d`
+- Bounds after 2D transforms : `mt.layout.measure_bounds_2d`
+- Alignment on paths : `mt.layout.queue_on_path`
+- Motion paths : `mt.path.bezier` / `mt.path.catmull_rom` / `mt.path.arc_length`
+- Path creation and editing : `mt.svg_path` / `path:*`
+- UTF-8 text processing : `mt.text.slice` / `mt.text.classify`
+- Clip time : `mt.timeline.progress` / `mt.timeline.duration` / `mt.timeline.remaining` / `mt.timeline.intro_outro_seconds` / `mt.timeline.window_progress` / `mt.timeline.window_ctx` / `mt.timeline.chain`
 
 ### 1. Value Constraints and Range Mapping
 
 #### `mt.clamp(value, low, high)`
 
-API level: `1+`
-
 Constrains a value to the closed interval `[low, high]`.
 
-##### Arguments
+ARGS
+- `value` (`number`) Value to constrain
+- `low` (`number`) Lower bound
+- `high` (`number`) Upper bound
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `value` | `number` | — | Required | Value to constrain |
-| `low` | `number` | — | Required | Lower bound |
-| `high` | `number` | — | Required | Upper bound |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Constrained value |
+RET
+- `number` -- Constrained value
 
 #### `mt.saturate(value)`
 
-API level: `1+`
-
 Shorthand for `mt.clamp(value, 0.0, 1.0)`. Use it to keep progress or alpha values within 0–1.
 
-##### Arguments
+ARGS
+- `value` (`number`) Value to constrain to 0–1
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `value` | `number` | — | Required | Value to constrain to 0–1 |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Value constrained to 0–1 |
+RET
+- `number` 0–1 -- Value constrained to 0–1
 
 #### `mt.remap(value, in_low, in_high, out_low, out_high, clamped?)`
 
-API level: `1+`
-
 Maps a value from an input interval to an output interval. Use it for general interval conversions, such as converting seconds into progress.
 
-##### Arguments
+ARGS
+- `value` (`number`) Value to convert
+- `in_low` / `in_high` (`number`) Input interval
+- `out_low` / `out_high` (`number`) Output interval
+- `clamped` (`boolean` default `false`) If `true`, constrains the input position to 0–1 before conversion
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `value` | `number` | — | Required | Value to convert |
-| `in_low` / `in_high` | `number` | — | Required | Input interval |
-| `out_low` / `out_high` | `number` | — | Required | Output interval |
-| `clamped` | `boolean` | — | `false` | If `true`, constrains the input position to 0–1 before conversion |
+RET
+- `number` -- Converted value
 
-##### Return Value
+ERRORS
 
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Converted value |
-
-##### Constraints and Errors
-
-| Condition | Description |
-|---|---|
-| `in_low == in_high` | Cannot be specified because the input interval would have zero width |
-
-##### Example
+- `in_low == in_high` : Cannot be specified because the input interval would have zero width
 
 ```lua
 -- Move the Y offset from 0.7 to 0.5 between 0.5 and 1.2 seconds
@@ -1616,31 +1586,19 @@ character.offset_y = mt.remap(ctx.time, 0.5, 1.2, 0.7, 0.5, true)
 
 #### `mt.wrap(value, boundaryA, boundaryB)`
 
-API level: `1+`
-
 Wraps a value within the half-open interval
 `[min(boundaryA, boundaryB), max(boundaryA, boundaryB))`.
 The boundaries may be specified in either order. Use it to make angles or hues periodic.
 
-> **Changed in API level 6**: The boundaries are now treated as `boundaryA` / `boundaryB`
-> instead of `low` / `high`. Reversed boundaries now wrap over the interval from the
-> smaller boundary to the larger boundary.
+ARGS
+- `value` (`number`) Value to wrap
+- `boundaryA` (`number`) One boundary that defines the interval
+- `boundaryB` (`number`) The other boundary that defines the interval
 
-##### Arguments
+RET
+- `number` -- Wrapped value
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `value` | `number` | — | Required | Value to wrap |
-| `boundaryA` | `number` | — | Required | One boundary that defines the interval |
-| `boundaryB` | `number` | — | Required | The other boundary that defines the interval |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Wrapped value |
-
-##### Constraints and Errors
+ERRORS
 
 If both boundaries are equal, the function returns that boundary value.
 
@@ -1648,118 +1606,74 @@ If both boundaries are equal, the function returns that boundary value.
 
 #### `mt.lerp(from, to, t)`
 
-API level: `1+`
-
 Linearly interpolates from `from` to `to`.
 
-##### Arguments
+ARGS
+- `from` (`number`) Value when `t = 0`
+- `to` (`number`) Value when `t = 1`
+- `t` (`number`) Interpolation factor. It is not clamped, so values outside 0–1 produce extrapolation
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `from` | `number` | — | Required | Value when `t = 0` |
-| `to` | `number` | — | Required | Value when `t = 1` |
-| `t` | `number` | — | Required | Interpolation factor. It is not clamped, so values outside 0–1 produce extrapolation |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | Same as the input values | `from + (to - from) * t` |
+RET
+- `number` Same as the input values -- `from + (to - from) * t`
 
 #### `mt.inverse_lerp(from, to, value)`
 
-API level: `1+`
-
 The inverse of `mt.lerp`. Returns the position of `value` within the interval `[from, to]` as an interpolation factor.
 
-##### Arguments
+ARGS
+- `from` (`number`) Start of the interval corresponding to a factor of 0
+- `to` (`number`) End of the interval corresponding to a factor of 1
+- `value` (`number`) Value whose position to calculate
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `from` | `number` | — | Required | Start of the interval corresponding to a factor of 0 |
-| `to` | `number` | — | Required | End of the interval corresponding to a factor of 1 |
-| `value` | `number` | — | Required | Value whose position to calculate |
+RET
+- `number` -- `(value - from) / (to - from)`. Not clamped
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | `(value - from) / (to - from)`. Not clamped |
-
-##### Constraints and Errors
+ERRORS
 
 Returns `0` if `from == to`.
 
 #### `mt.lerp_angle(from, to, t)`
 
-API level: `1+`
-
 Interpolates angles in degrees along the **shortest direction**. Use it to avoid taking the long way around, as with `mt.lerp(350, 10, t)` (interpolates 350°→10° along the +20° direction).
 
-##### Arguments
+ARGS
+- `from` (`number` degree) Starting angle
+- `to` (`number` degree) Target angle
+- `t` (`number`) Interpolation factor. Not clamped
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `from` | `number` | degree | Required | Starting angle |
-| `to` | `number` | degree | Required | Target angle |
-| `t` | `number` | — | Required | Interpolation factor. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | degree | Interpolated angle |
+RET
+- `number` degree -- Interpolated angle
 
 #### `mt.smoothstep(edge0, edge1, value)`
 
-API level: `1+`
-
 Returns a value that transitions smoothly from 0 to 1 as `value` crosses from `edge0` to `edge1` (Hermite interpolation, with zero velocity at both ends).
 
-##### Arguments
+ARGS
+- `edge0` (`number`) Start of the transition, where the result is 0
+- `edge1` (`number`) End of the transition, where the result is 1
+- `value` (`number`) Value to evaluate
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `edge0` | `number` | — | Required | Start of the transition, where the result is 0 |
-| `edge1` | `number` | — | Required | End of the transition, where the result is 1 |
-| `value` | `number` | — | Required | Value to evaluate |
+RET
+- `number` 0–1 -- Smooth transition value. Clamped outside the interval
 
-##### Return Value
+ERRORS
 
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Smooth transition value. Clamped outside the interval |
-
-##### Constraints and Errors
-
-| Condition | Description |
-|---|---|
-| `edge0 == edge1` | Cannot be specified because the transition interval would have zero width |
+- `edge0 == edge1` : Cannot be specified because the transition interval would have zero width
 
 #### `mt.keyframes(keys, time)`
 
-API level: `1+`
-
 Evaluates keyframes spanning multiple intervals. Because it can be called directly with `ctx.time`, you can write multistage choreography such as falling → bouncing → stopping without manually combining `clamp` and `inverse_lerp`.
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `keys` | `table[]` | — | Required | Array of keyframes. Each element has the form `{ t = <time>, v = <value>, ease = <optional> }`, ordered by ascending `t` |
-| `time` | `number` | seconds | Required | Time to evaluate |
+ARGS
+- `keys` (`table[]`) Array of keyframes. Each element has the form `{ t = <time>, v = <value>, ease = <optional> }`, ordered by ascending `t`
+- `time` (`number` seconds) Time to evaluate
 
 Each key’s `v` must be either a number or a color table of the form `{ r, g, b, a }`; the two types cannot be mixed within one `keys` array. `ease` is optional (linear by default) and is applied to the interval **leading up to that key**. You can pass a string naming an easing function, such as `mt.ease.out_bounce`, or any easing function in the form `function(t) ... end`.
 
 If `time` is before the first key, the first value is returned; if it is after the last key, the last value is returned (clamping).
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number \| color` | Same as the key values | Value interpolated within the interval |
-
-##### Example
+RET
+- `number \ color` -- Same as the key values
 
 ```lua
 -- Fall with a bounce from 0.0 to 0.3 seconds, remain still from 0.3 to 0.5 seconds,
@@ -1783,24 +1697,14 @@ character.fill.color = tint
 
 #### `mt.distribute(index, count)`
 
-API level: `1+`
-
 Distributes a 1-based index evenly across 0–1. The first index maps to `0`, and the last maps to `1`.
 
-##### Arguments
+ARGS
+- `index` (`integer`) 1-based index, such as an index for `ctx.chars[index]`
+- `count` (`integer`) Total count, such as `ctx.char_count`
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `index` | `integer` | — | Required | 1-based index, such as an index for `ctx.chars[index]` |
-| `count` | `integer` | — | Required | Total count, such as `ctx.char_count` |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | `(index - 1) / (count - 1)` constrained to 0–1. Returns `0` if `count <= 1` |
-
-##### Example
+RET
+- `number` 0–1 -- `(index - 1) / (count - 1)` constrained to 0–1. Returns `0` if `count <= 1`
 
 ```lua
 -- Arrange hues in a rainbow according to character position
@@ -1811,50 +1715,39 @@ character.fill.color = mt.color.from_hsv(hue, 0.8, 1.0)
 
 #### `mt.each_char(ctx, options?)`
 
-API level: `6+`
+since API level 6
 
 Returns an iterator over shaped characters with optional filtering. `index` always addresses `ctx.chars`, so it can be passed straight to `ctx.chars[index]` or to the `mt.layout.*` helpers. The counter within the filtered subset is `info.n`.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) OnLayout / OnPath context
+- `options.from` (`integer` default `1`) First character index to visit
+- `options.to` (`integer` default `ctx.char_count`) Last character index to visit, inclusive
+- `options.line` (`integer` default No filter) Keep only characters with this `line_index`
+- `options.order` (`string` default `"asc"`) How `info.progress` is assigned: `"asc"` / `"desc"` / `"center"` / `"random"`
+- `options.seed` (`integer` default `0`) Seed selecting the order when `order = "random"`
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | OnLayout / OnPath context |
-| `options.from` | `integer` | — | `1` | First character index to visit |
-| `options.to` | `integer` | — | `ctx.char_count` | Last character index to visit, inclusive |
-| `options.line` | `integer` | — | No filter | Keep only characters with this `line_index` |
-| `options.order` | `string` | — | `"asc"` | How `info.progress` is assigned: `"asc"` / `"desc"` / `"center"` / `"random"` |
-| `options.seed` | `integer` | — | `0` | Seed selecting the order when `order = "random"` |
+RET
 
-##### Return Value
-
-| Type | Description |
-|---|---|
-| `function` | Iterator yielding `index` (into `ctx.chars`), `character` and `info` |
+- `function` : Iterator yielding `index` (into `ctx.chars`), `character` and `info`
 
 Fields of `info`:
 
-| Field | Type | Description |
-|---|---|---|
-| `progress` | `number` | Normalized position in 0–1 following `order` |
-| `n` | `integer` | 1-based counter within the filtered subset |
-| `count` | `integer` | Number of elements in the filtered subset (at least `1`) |
-| `first` / `last` | `boolean` | Whether this is the first or last element of the filtered subset |
+- `progress` : `number` : Normalized position in 0–1 following `order`
+- `n` : `integer` : 1-based counter within the filtered subset
+- `count` : `integer` : Number of elements in the filtered subset (at least `1`)
+- `first` / `last` : `boolean` : Whether this is the first or last element of the filtered subset
 
 `order` only remaps `progress`; the visit order is always ascending by index.
 
-| Value | `progress` sequence (5 elements) |
-|---|---|
-| `"asc"` | `0, 0.25, 0.5, 0.75, 1` |
-| `"desc"` | `1, 0.75, 0.5, 0.25, 0` |
-| `"center"` | `1, 0.5, 0, 0.5, 1` |
-| `"random"` | A duplicate-free shuffle determined by the seed |
+- `"asc"` : `0, 0.25, 0.5, 0.75, 1`
+- `"desc"` : `1, 0.75, 0.5, 0.25, 0`
+- `"center"` : `1, 0.5, 0, 0.5, 1`
+- `"random"` : A duplicate-free shuffle determined by the seed
 
 `"center"` is the normalized distance from the midpoint. With an even count no element sits on the midpoint, so the minimum is not `0`.
 
 > **Note**: `info` is the same table on every iteration. Copy the values out if they need to outlive the loop.
-
-##### Example
 
 ```lua
 -- Open the second line from the centre outwards
@@ -1866,42 +1759,33 @@ end
 
 #### `mt.each_part(ctx, options?)`
 
-API level: `6+`
+since API level 6
 
 Returns an iterator over shaped parts with optional filtering. It follows the same rules as `mt.each_char`, and additionally resolves the owning character on `info` and can filter by it.
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | OnLayout / OnPath context |
-| `options.from` | `integer` | — | `1` | First part index to visit |
-| `options.to` | `integer` | — | `ctx.part_count` | Last part index to visit, inclusive |
-| `options.from_char` | `integer` | — | No filter | Keep only parts whose owning character index is at or above this |
-| `options.to_char` | `integer` | — | No filter | Keep only parts whose owning character index is at or below this |
-| `options.line` | `integer` | — | No filter | Keep only parts with this `line_index` |
-| `options.order` | `string` | — | `"asc"` | How `info.progress` is assigned, as in `mt.each_char` |
-| `options.seed` | `integer` | — | `0` | Seed selecting the order when `order = "random"` |
+ARGS
+- `ctx` (`table`) OnLayout / OnPath context
+- `options.from` (`integer` default `1`) First part index to visit
+- `options.to` (`integer` default `ctx.part_count`) Last part index to visit, inclusive
+- `options.from_char` (`integer` default No filter) Keep only parts whose owning character index is at or above this
+- `options.to_char` (`integer` default No filter) Keep only parts whose owning character index is at or below this
+- `options.line` (`integer` default No filter) Keep only parts with this `line_index`
+- `options.order` (`string` default `"asc"`) How `info.progress` is assigned, as in `mt.each_char`
+- `options.seed` (`integer` default `0`) Seed selecting the order when `order = "random"`
 
 `from` / `to` (a range of part indices) and `from_char` / `to_char` (a range of owning character indices) are separate axes. When both are given, only parts satisfying both pass.
 
-##### Return Value
+RET
 
-| Type | Description |
-|---|---|
-| `function` | Iterator yielding `index` (into `ctx.parts`), `part` and `info` |
+- `function` : Iterator yielding `index` (into `ctx.parts`), `part` and `info`
 
 `info` carries every field from `mt.each_char` plus:
 
-| Field | Type | Description |
-|---|---|---|
-| `char` | `MtCharacter` | The character owning this part (an element of `ctx.chars`) |
-| `char_index` | `integer` | Index of the owning character in `ctx.chars` |
-| `index_in_char` | `integer` | Position within the owning character |
+- `char` : `MtCharacter` : The character owning this part (an element of `ctx.chars`)
+- `char_index` : `integer` : Index of the owning character in `ctx.chars`
+- `index_in_char` : `integer` : Position within the owning character
 
 `info.progress` spans the **whole filtered set** across 0–1. It does not restart on character boundaries. To span 0–1 per character, nest `mt.each_char` and `mt.each_part`.
-
-##### Example
 
 ```lua
 -- Lift the parts of characters 3 through 5 in one continuous run
@@ -1913,32 +1797,20 @@ end
 
 #### `mt.stagger(time, index, delay, duration)`
 
-API level: `1+`
+Returns animation progress with a different start time for each index (domino cascade, typewriter, sequential entrance). This is the standard function for character-by-character animation. The animation for index `i` begins `delay * (i - 1)` seconds later and progresses from 0 to 1 over `duration` seconds.
 
-Returns animation progress with a different start time for each index. This is the standard function for character-by-character animation. The animation for index `i` begins `delay * (i - 1)` seconds later and progresses from 0 to 1 over `duration` seconds.
+ARGS
+- `time` (`number` seconds) Elapsed time since the animation began
+- `index` (`integer`) 1-based index
+- `delay` (`number` seconds) Delay before the next index begins
+- `duration` (`number` seconds) Animation duration for each index
 
-##### Arguments
+RET
+- `number` 0–1 -- Progress clamped to 0–1
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `time` | `number` | seconds | Required | Elapsed time since the animation began |
-| `index` | `integer` | — | Required | 1-based index |
-| `delay` | `number` | seconds | Required | Delay before the next index begins |
-| `duration` | `number` | seconds | Required | Animation duration for each index |
+ERRORS
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Progress clamped to 0–1 |
-
-##### Constraints and Errors
-
-| Condition | Description |
-|---|---|
-| `duration <= 0` | Specify a value greater than 0 |
-
-##### Example
+- `duration <= 0` : Specify a value greater than 0
 
 ```lua
 for index = 1, ctx.char_count do
@@ -1949,9 +1821,9 @@ end
 
 #### `mt.stagger_progress(progress, position, span)`
 
-API level: `6+`
+since API level 6
 
-Adds a position-dependent start delay to an existing 0–1 normalized progress.
+Adds a position-dependent start delay to an existing 0–1 normalized progress for synchronized group cascade within a shared window.
 The element at `position = 0` starts with the shared progress, while the element
 at `position = 1` starts when the shared progress reaches `span`. Every element
 finishes when the shared progress reaches 1.
@@ -1961,19 +1833,13 @@ an individual animation duration. Use `mt.stagger_progress` when distributing
 progress already obtained from a helper such as
 `mt.timeline.intro_outro_seconds`.
 
-##### Arguments
+ARGS
+- `progress` (`number` 0–1) Shared progress to distribute. Values outside the range are accepted, and the result is clamped to 0–1
+- `position` (`number` 0–1) Normalized element position. Values outside the range are clamped to 0–1. Usually `info.progress`
+- `span` (`number` less than 1) Fraction of the shared window across which start times are distributed
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `progress` | `number` | 0–1 | Required | Shared progress to distribute. Values outside the range are accepted, and the result is clamped to 0–1 |
-| `position` | `number` | 0–1 | Required | Normalized element position. Values outside the range are clamped to 0–1. Usually `info.progress` |
-| `span` | `number` | less than 1 | Required | Fraction of the shared window across which start times are distributed |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Progress for the element at `position` |
+RET
+- `number` 0–1 -- Progress for the element at `position`
 
 The result is calculated as follows:
 
@@ -1981,15 +1847,11 @@ The result is calculated as follows:
 mt.saturate((progress - mt.saturate(position) * span) / (1.0 - span))
 ```
 
-##### Constraints and Errors
+ERRORS
 
-| Condition | Description |
-|---|---|
-| `progress` or `position` is not finite | Error |
-| `span` is not finite | Error |
-| `span < 0` or `span >= 1` | Error |
-
-##### Example
+- `progress` or `position` is not finite : Error
+- `span` is not finite : Error
+- `span < 0` or `span >= 1` : Error
 
 ```lua
 local introProgress, outroProgress =
@@ -2011,64 +1873,44 @@ time assignment, not the loop's visit order.
 
 #### `mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?)`
 
-API level: `1+`
+Returns staggered progress with a configurable starting direction or order (ascending, descending, center-out ripple, duplicate-free random).
 
-Returns staggered progress with a configurable starting direction or order.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `time` | `number` | seconds | Required | Time to evaluate |
-| `index` | `integer` | — | Required | 1-based index |
-| `count` | `integer` | — | Required | Total count, such as `ctx.char_count` |
-| `pattern` | `string` | — | Required | Progression pattern: `"asc"` / `"desc"` (alias `"right_to_left"`) / `"center"` / `"random"` |
-| `delay` | `number` | seconds | Required | Start delay |
-| `duration` | `number` | seconds | Required | Animation duration |
-| `seed` | `integer` | — | `42` | Random seed when `pattern = "random"` |
+ARGS
+- `time` (`number` seconds) Time to evaluate
+- `index` (`integer`) 1-based index
+- `count` (`integer`) Total count, such as `ctx.char_count`
+- `pattern` (`string`) Progression pattern: `"asc"` / `"desc"` (alias `"right_to_left"`) / `"center"` / `"random"`
+- `delay` (`number` seconds) Start delay
+- `duration` (`number` seconds) Animation duration
+- `seed` (`integer` default `42`) Random seed when `pattern = "random"`
 
 `"random"` assigns a duplicate-free shuffled rank to each index. Ranks are always exactly one apart, so the delays stay evenly spaced.
 
-> **Changed in API level 6**: delays used to come from an independent random per index, which let several characters land on nearly the same delay while other stretches stayed empty. It now uses a permutation, so the same `seed` produces a different order than before.
+RET
+- `number` 0–1 -- Progress clamped to 0–1
 
-##### Return Value
+ERRORS
 
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Progress clamped to 0–1 |
-
-##### Constraints and Errors
-
-| Condition | Description |
-|---|---|
-| `duration <= 0` | Specify a value greater than 0 |
+- `duration <= 0` : Specify a value greater than 0
 
 ### 4. Distance-Based Influence
 
 #### `mt.falloff(distance, radius)`
 
-API level: `3+`
+since API level 3
 
-Returns an **influence weight** that is strongest at the center and decreases smoothly with distance. The return value is 0–1.
+Returns an influence weight that is strongest at the center and decreases smoothly with distance (wavefront, passing shine, ripple, shockwave, localized emphasis). The return value is 0–1.
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `distance` | `number` | Input coordinate system | Required | Distance from the center of the effect |
-| `radius` | `number` | Input coordinate system | Required | Spread of the falloff. At this distance, the weight is approximately `0.37` (`e^-1`) |
+ARGS
+- `distance` (`number` Input coordinate system) Distance from the center of the effect
+- `radius` (`number` Input coordinate system) Spread of the falloff. At this distance, the weight is approximately `0.37` (`e^-1`)
 
 This is a standard choice for **concentrating an effect around a particular position**, such as a wave crest, a moving highlight, or emphasis focused on one location.
 
 Choosing between it and `mt.smoothstep`: `smoothstep` becomes exactly 0 outside its range, creating a cutoff, whereas `falloff` has a tail that continues indefinitely. As a result, a moving crest or light appears to **pass through continuously**. It also avoids the corner produced by linear falloff such as (`1 - d/r`).
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Distance-based influence weight |
-
-##### Example
+RET
+- `number` 0–1 -- Distance-based influence weight
 
 ```lua
 -- Raise only the characters currently being passed by the waveFront
@@ -2083,29 +1925,21 @@ character.offset_y = 0.5 + mt.falloff(distance, 0.25) * 0.1
 
 #### `mt.random(seed, index, channel?)`
 
-API level: `1+`
-
 A stable random value determined solely by the `(seed, index, channel)` tuple. Because it does not depend on call order, it can safely be used to vary individual characters or parts (`math.random` depends on call order and cannot be used safely for this purpose).
 
-> **Added in API level 6**: An optional string `channel` is now accepted.
-> Name each use, such as `"angle"` or `"distance"`, to obtain independent random
-> values without manually salting the seed or index. Omitting it preserves the previous results.
+> [!TIP]
+> Name each use with `channel`, such as `"angle"` or `"distance"`, to obtain independent
+> random values without manually salting the seed or index.
 
-##### Arguments
+ARGS
+- `seed` (`integer`) Value selecting the random sequence. Use the same seed for the same purpose
+- `index` (`integer`) Position within the sequence, such as a character index
+- `channel` (`string` optional) Name separating one use from another. API level 6 or later
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `seed` | `integer` | — | Required | Value selecting the random sequence. Use the same seed for the same purpose |
-| `index` | `integer` | — | Required | Position within the sequence, such as a character index |
-| `channel` | `string` | — | Omitted | Name separating one use from another. API level 6 or later |
+RET
+- `number` 0–1 -- Random value in `[0, 1)`. The same arguments always produce the same value
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Random value in `[0, 1)`. The same arguments always produce the same value |
-
-##### Constraints and Errors
+ERRORS
 
 The UTF-8 bytes of `channel` are converted with a fixed 32-bit hash. Unicode normalization
 is not performed, so ASCII names such as `"angle"` or `"color.hue"` are recommended.
@@ -2113,45 +1947,27 @@ The 32-bit hash can theoretically collide and is not suitable for cryptographic 
 
 #### `mt.random_range(seed, index, low, high, channel?)`
 
-API level: `1+`
-
 Returns the result of `mt.random` mapped to `[low, high)`. In API level 6 or later,
 an optional string `channel` separates random sequences by purpose.
 
-##### Arguments
+ARGS
+- `seed` / `index` (`integer`) Same as `mt.random`
+- `low` / `high` (`number`) Output range
+- `channel` (`string` optional) Same as `mt.random`. API level 6 or later
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `seed` / `index` | `integer` | — | Required | Same as `mt.random` |
-| `low` / `high` | `number` | — | Required | Output range |
-| `channel` | `string` | — | Omitted | Same as `mt.random`. API level 6 or later |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | Same as the output range | Stable random value in `[low, high)` |
+RET
+- `number` Same as the output range -- Stable random value in `[low, high)`
 
 #### `mt.noise1(x, seed?)`
 
-API level: `1+`
-
 Deterministic one-dimensional value noise. Returns a fluctuation that varies smoothly and continuously with `x`. Passing time as `x` produces temporal fluctuation; passing a position produces spatial fluctuation.
 
-##### Arguments
+ARGS
+- `x` (`number`) Sample position. Values are smoothly interpolated between lattice points at integer intervals
+- `seed` (`integer` default `0`) Value that changes the fluctuation pattern
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `x` | `number` | — | Required | Sample position. Values are smoothly interpolated between lattice points at integer intervals |
-| `seed` | `integer` | — | `0` | Value that changes the fluctuation pattern |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | -1–1 | Continuous value that is always the same for the same arguments |
-
-##### Example
+RET
+- `number` -1–1 -- Continuous value that is always the same for the same arguments
 
 ```lua
 -- Handheld-camera-style shake with a different phase for each character
@@ -2160,44 +1976,28 @@ character.rotation = mt.noise1(ctx.time * 0.8, index) * 4.0
 
 #### `mt.noise2(x, y, seed?)`
 
-API level: `1+`
-
 Deterministic two-dimensional value noise. Returns smooth fluctuation at position `(x, y)`. Passing time on one axis and character position on the other can create fluctuation that “flows through space.”
 
-##### Arguments
+ARGS
+- `x` / `y` (`number`) Sample position
+- `seed` (`integer` default `0`) Value that changes the fluctuation pattern
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `x` / `y` | `number` | — | Required | Sample position |
-| `seed` | `integer` | — | `0` | Value that changes the fluctuation pattern |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | -1–1 | Continuous value that is always the same for the same arguments |
+RET
+- `number` -1–1 -- Continuous value that is always the same for the same arguments
 
 #### `mt.wiggle(time, frequency, amplitude, octaves?, seed?)`
 
-API level: `1+`
+Computes deterministic organic tremor (camera shake, wandering float, handheld jitter).
 
-Returns a deterministic animation value for a rapid fluctuation (wiggle).
+ARGS
+- `time` (`number` seconds) Time to evaluate
+- `frequency` (`number` Hz) Number of fluctuations per second
+- `amplitude` (`number` Same as the output value) Amplitude of the first octave. This is not the maximum sum across multiple octaves
+- `octaves` (`integer` default `1`) Number of noise octaves to layer
+- `seed` (`integer` default `0`) Random seed
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `time` | `number` | seconds | Required | Time to evaluate |
-| `frequency` | `number` | Hz | Required | Number of fluctuations per second |
-| `amplitude` | `number` | Same as the output value | Required | Amplitude of the first octave. This is not the maximum sum across multiple octaves |
-| `octaves` | `integer` | — | `1` | Number of noise octaves to layer |
-| `seed` | `integer` | — | `0` | Random seed |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | Same as `amplitude` | Fluctuation value |
+RET
+- `number` Same as `amplitude` -- Fluctuation value
 
 When `octaves > 1`, the amplitudes are halved as they are added, so the theoretical absolute upper bound is `amplitude * (2 - 2^(1 - octaves))`, approaching `2 * amplitude` as the number of octaves increases.
 
@@ -2205,153 +2005,93 @@ When `octaves > 1`, the amplitudes are halved as they are added, so the theoreti
 
 #### `mt.cycle(t, period)`
 
-API level: `1+`
+Repeating 0 to 1 linear sawtooth ramp (looping animation, continuous timer, beacon sweep).
 
-Looping progress that repeats values from 0 up to, but not including, 1 every `period` seconds. Use it as progress for looping animations.
+ARGS
+- `t` (`number` seconds) Time to evaluate
+- `period` (`number` seconds) Length of one cycle
 
-##### Arguments
+RET
+- `number` 0–1 -- Progress greater than or equal to 0 and less than 1
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Time to evaluate |
-| `period` | `number` | seconds | Required | Length of one cycle |
+ERRORS
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Progress greater than or equal to 0 and less than 1 |
-
-##### Constraints and Errors
-
-| Condition | Description |
-|---|---|
-| `period <= 0` | Specify a value greater than 0 |
+- `period <= 0` : Specify a value greater than 0
 
 #### `mt.pingpong(t, period)`
 
-API level: `1+`
+Repeating 0 to 1 to 0 back-and-forth motion (pendulum, shuttle loop).
 
-A value that travels 0→1→0 over `period` seconds. Use it for loops that go out and return.
+ARGS
+- `t` (`number` seconds) Time to evaluate
+- `period` (`number` seconds) Length of one round trip
 
-##### Arguments
+RET
+- `number` 0–1 -- Oscillating value from 0 to 1
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Time to evaluate |
-| `period` | `number` | seconds | Required | Length of one round trip |
+ERRORS
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Oscillating value from 0 to 1 |
-
-##### Constraints and Errors
-
-| Condition | Description |
-|---|---|
-| `period <= 0` | Specify a value greater than 0 |
+- `period <= 0` : Specify a value greater than 0
 
 #### `mt.wave(t, frequency, phase?)`
 
-API level: `1+`
+Computes a sine wave harmonic oscillation (floating, bobbing, undulating, breathing). Shorthand for `sin(2π × frequency × t + phase)`.
 
-Shorthand for the sine wave `sin(2π × frequency × t + phase)`.
+ARGS
+- `t` (`number` seconds) Time to evaluate
+- `frequency` (`number` Hz) Number of cycles per second
+- `phase` (`number` radian default `0`) Phase offset. It can also offset the wave for each index
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Time to evaluate |
-| `frequency` | `number` | Hz | Required | Number of cycles per second |
-| `phase` | `number` | radian | `0` | Phase offset. It can also offset the wave for each index |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | -1–1 | Waveform value |
+RET
+- `number` -1–1 -- Waveform value
 
 #### `mt.wave_square(t, frequency, phase?)`
 
-API level: `1+`
+Computes a square wave periodic toggle between -1 and 1 (blink, strobe, flashing).
 
-A square wave.
+ARGS
+- `t` (`number` seconds) Time to evaluate
+- `frequency` (`number` Hz) Number of cycles per second
+- `phase` (`number` radian default `0`) Phase offset
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Time to evaluate |
-| `frequency` | `number` | Hz | Required | Number of cycles per second |
-| `phase` | `number` | radian | `0` | Phase offset |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | `-1.0` or `1.0` |
+RET
+- `number` -- `-1.0` or `1.0`
 
 #### `mt.wave_triangle(t, frequency, phase?)`
 
-API level: `1+`
-
 A triangle wave.
 
-##### Arguments
+ARGS
+- `t` (`number` seconds) Time to evaluate
+- `frequency` (`number` Hz) Number of cycles per second
+- `phase` (`number` radian default `0`) Phase offset
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Time to evaluate |
-| `frequency` | `number` | Hz | Required | Number of cycles per second |
-| `phase` | `number` | radian | `0` | Phase offset |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | -1–1 | Value that travels linearly back and forth between `-1.0` and `1.0` |
+RET
+- `number` -1–1 -- Value that travels linearly back and forth between `-1.0` and `1.0`
 
 #### `mt.wave_sawtooth(t, frequency, phase?)`
 
-API level: `1+`
-
 A sawtooth wave.
 
-##### Arguments
+ARGS
+- `t` (`number` seconds) Time to evaluate
+- `frequency` (`number` Hz) Number of cycles per second
+- `phase` (`number` radian default `0`) Phase offset
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Time to evaluate |
-| `frequency` | `number` | Hz | Required | Number of cycles per second |
-| `phase` | `number` | radian | `0` | Phase offset |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | -1–1 | Repeating value that rises linearly from `-1.0` to less than `1.0` |
+RET
+- `number` -1–1 -- Repeating value that rises linearly from `-1.0` to less than `1.0`
 
 #### `mt.spring(t, frequency, damping)`
 
-API level: `1+`
+Computes a damped harmonic oscillation (elastic recoil, jiggle, wobble, overshoot settling). It begins at `1` when `t = 0` and converges toward `0` while oscillating.
 
-Evaluates a damped oscillation. It begins at `1` when `t = 0` and converges toward `0` while oscillating. Use it for motion that overshoots, oscillates, and then settles.
+ARGS
+- `t` (`number` seconds) Elapsed time since the motion began. Returns the initial value when `t <= 0`
+- `frequency` (`number` Hz) Number of oscillations per second
+- `damping` (`number` 1/second) Damping strength. Larger values converge faster
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Elapsed time since the motion began. Returns the initial value when `t <= 0` |
-| `frequency` | `number` | Hz | Required | Number of oscillations per second |
-| `damping` | `number` | 1/second | Required | Damping strength. Larger values converge faster |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Damped oscillation value converging from the initial value 1 toward 0 |
+RET
+- `number` -- Damped oscillation value converging from the initial value 1 toward 0
 
 For `t > 0`, it calculates `exp(-damping * t) * cos(2π * frequency * t)`.
 
@@ -2360,8 +2100,6 @@ For `t > 0`, it calculates `exp(-damping * t) * cos(2π * frequency * t)`.
 >
 > - **Suitable uses**: A **residual displacement** such as `offset`, `rotation`, or scatter amount (for example, `0.5 + settle * 0.1`)
 > - **Unsuitable uses**: Direct assignment to progress, `opacity`, `scale`, or `stretch`, or use as the `t` argument to `mt.lerp`. If you need progress, use `mt.ease.*` or `mt.saturate`, and do not multiply a scale factor directly by a negative value (`stretch` has no host-side lower-bound clamp and can reach rendering while still negative. `scale` is clamped to a positive lower bound, and `opacity` is clamped to 0–1 immediately before rendering)
-
-##### Example
 
 ```lua
 -- Use as deviation from the target position (maximum at t=0 and converges over time; negative intervals are overshoot)
@@ -2373,26 +2111,18 @@ character.offset_y = 0.5 + settle * 0.1
 
 #### `mt.polar_offset_2d(angleDegrees, radius)`
 
-API level: `5+`
+since API level 5
 
-Converts polar coordinates (direction and distance) into two offset values in Canvas space. It lets you express motion such as scattering, gathering, and orbiting without writing `cos` / `sin`.
+Converts a polar direction (degrees) and radius into a Y-up canvas offset pair (radial scatter, orbital motion, circular explosion). It lets you express motion such as scattering, gathering, and orbiting without writing `cos` / `sin`.
 
-##### Arguments
+ARGS
+- `angleDegrees` (`number` degree) Direction. As with [coordinates](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-coordinates), 0 degrees points right and positive values rotate clockwise
+- `radius` (`number` canvas normalized displacement) Distance in that direction
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `angleDegrees` | `number` | degree | Required | Direction. As with [coordinates](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-coordinates), 0 degrees points right and positive values rotate clockwise |
-| `radius` | `number` | canvas normalized displacement | Required | Distance in that direction |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number, number` | canvas normalized displacement | Two values: `offsetX, offsetY` |
+RET
+- `number, number` canvas normalized displacement -- Two values: `offsetX, offsetY`
 
 The input angle uses the same screen-based convention as `rotation` / `shadow.angle` (90 degrees points down), but the returned values are Y-up. They can be added directly to `offset_x` / `offset_y`. `mt.projectile_2d` uses the same convention.
-
-##### Example
 
 ```lua
 -- Scatter characters radially
@@ -2406,45 +2136,36 @@ character.offset_y = 0.5 + dy
 
 #### `mt.bounce_y(config)` / `mt.bounce_x(config)`
 
-API level: `3+`
+since API level 3
 
 Calculates and returns the position, velocity, Squash & Stretch, and contact-position correction for a one-dimensional ballistic bounce against a floor (Y axis) or wall (X axis). It does not modify characters or parts directly. Both a configuration-table form and a positional-argument form are supported.
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `config` | `table` | — | Required | Settings for time, collision surface, starting position, gravity or acceleration, restitution, initial velocity, and Squash & Stretch |
+ARGS
+- `config` (`table`) Settings for time, collision surface, starting position, gravity or acceleration, restitution, initial velocity, and Squash & Stretch
 
 ##### Shared `config`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | `0.0` | Elapsed time since the animation began |
-| `restitution` | `number` | — | `0.5` | Coefficient of restitution. Larger values produce a stronger rebound after impact |
-| `start_velocity` | `number` | canvas normalized displacement/second | `0.0` | Initial velocity along the axis |
-| `squash` / `squash_strength` | `number` | factor | `0.15` | Strength with which the contact axis is compressed according to impact velocity |
-| `stretch` / `stretch_strength` | `number` | factor | `0.02` | Strength with which the direction-of-motion axis is extended according to movement velocity |
-| `flexibility` | `number` | radian/second | `16.0` | Oscillation speed when returning to the original shape after impact |
-| `damping` | `number` | 1/second | `7.0` | Rate at which post-impact oscillation settles |
+- `t` : `number` : seconds : `0.0` : Elapsed time since the animation began
+- `restitution` : `number` : `0.5` : Coefficient of restitution. Larger values produce a stronger rebound after impact
+- `start_velocity` : `number` : canvas normalized displacement/second : `0.0` : Initial velocity along the axis
+- `squash` / `squash_strength` : `number` : factor : `0.15` : Strength with which the contact axis is compressed according to impact velocity
+- `stretch` / `stretch_strength` : `number` : factor : `0.02` : Strength with which the direction-of-motion axis is extended according to movement velocity
+- `flexibility` : `number` : radian/second : `16.0` : Oscillation speed when returning to the original shape after impact
+- `damping` : `number` : 1/second : `7.0` : Rate at which post-impact oscillation settles
 
 When an item has multiple names, the leftmost name takes precedence. Names to the right are compatibility aliases.
 
 ##### `config` Specific to `mt.bounce_y`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ground_y` | `number` | canvas normalized position | `0.0` | Y coordinate of the floor to collide with |
-| `start_y` | `number` | canvas normalized position | `0.0` | Starting Y coordinate |
-| `gravity` | `number` | canvas normalized displacement/second² | `9.81` | Magnitude of acceleration toward the floor |
+- `ground_y` : `number` : canvas normalized position : `0.0` : Y coordinate of the floor to collide with
+- `start_y` : `number` : canvas normalized position : `0.0` : Starting Y coordinate
+- `gravity` : `number` : canvas normalized displacement/second² : `9.81` : Magnitude of acceleration toward the floor
 
 ##### `config` Specific to `mt.bounce_x`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `wall_x` / `ground_x` | `number` | canvas normalized position | `0.0` | X coordinate of the wall to collide with. `ground_x` is a compatibility alias |
-| `start_x` | `number` | canvas normalized position | `0.0` | Starting X coordinate |
-| `acceleration` / `accel_x` / `gravity` | `number` | canvas normalized displacement/second² | `9.81` | Magnitude of acceleration toward the wall. `accel_x` and `gravity` are compatibility aliases |
+- `wall_x` / `ground_x` : `number` : canvas normalized position : `0.0` : X coordinate of the wall to collide with. `ground_x` is a compatibility alias
+- `start_x` : `number` : canvas normalized position : `0.0` : Starting X coordinate
+- `acceleration` / `accel_x` / `gravity` : `number` : canvas normalized displacement/second² : `9.81` : Magnitude of acceleration toward the wall. `accel_x` and `gravity` are compatibility aliases
 
 ##### Positional-Argument Form
 
@@ -2460,28 +2181,23 @@ mt.bounce_x(t, wallX, startX, acceleration, restitution, startVelocity,
 
 Each argument can be omitted and uses the same default as the corresponding `config` field.
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | In configuration-table form, a table containing position, velocity, deformation, and collision state |
-| Multiple `number` values | As appropriate for each value | In positional-argument form, returns the calculation result as eight values |
+RET (one of)
+- `table` -- In configuration-table form, a table containing position, velocity, deformation, and collision state
+- Multiple `number` values As appropriate for each value -- In positional-argument form, returns the calculation result as eight values
 
 ##### Return-Value Table
 
-| Field | Type | Unit | Description |
-|---|---|---|---|
-| `pos` | `number` | canvas normalized position | Calculated coordinate along the axis |
-| `y` | `number` | canvas normalized position | Calculated Y coordinate for `mt.bounce_y`. Same value as `pos` |
-| `x` | `number` | canvas normalized position | Calculated X coordinate for `mt.bounce_x`. Same value as `pos` |
-| `velocity` | `number` | canvas normalized displacement/second | Velocity along the axis at that time |
-| `stretch_x` / `stretch_y` | `number` | multiplier | X- and Y-axis stretch factors incorporating Squash & Stretch |
-| `offset_y` | `number` | Ratio of `bounds_height` | Correction used by `mt.bounce_y` to preserve the contact position |
-| `offset_x` | `number` | Ratio of `bounds_width` | Correction used by `mt.bounce_x` to preserve the contact position |
-| `last_impact_time` | `number` / `nil` | seconds | Time of the previous impact. `nil` if no impact has occurred yet |
-| `next_impact_time` | `number` / `nil` | seconds | Time of the next impact. `nil` if the object has already settled |
-| `impact_count` | `integer` | impacts | Number of impacts so far |
-| `settled` | `boolean` | — | Whether the bounce has ended and the object has settled |
+- `pos` : `number` : canvas normalized position : Calculated coordinate along the axis
+- `y` : `number` : canvas normalized position : Calculated Y coordinate for `mt.bounce_y`. Same value as `pos`
+- `x` : `number` : canvas normalized position : Calculated X coordinate for `mt.bounce_x`. Same value as `pos`
+- `velocity` : `number` : canvas normalized displacement/second : Velocity along the axis at that time
+- `stretch_x` / `stretch_y` : `number` : multiplier : X- and Y-axis stretch factors incorporating Squash & Stretch
+- `offset_y` : `number` : Ratio of `bounds_height` : Correction used by `mt.bounce_y` to preserve the contact position
+- `offset_x` : `number` : Ratio of `bounds_width` : Correction used by `mt.bounce_x` to preserve the contact position
+- `last_impact_time` : `number` / `nil` : seconds : Time of the previous impact. `nil` if no impact has occurred yet
+- `next_impact_time` : `number` / `nil` : seconds : Time of the next impact. `nil` if the object has already settled
+- `impact_count` : `integer` : impacts : Number of impacts so far
+- `settled` : `boolean` : Whether the bounce has ended and the object has settled
 
 The table’s `[1]` through `[5]` entries also provide, in order, the axis coordinate, `stretch_x`, `stretch_y`, contact-position correction, and `velocity`.
 
@@ -2491,8 +2207,6 @@ In positional-argument form, the function returns the axis coordinate, `stretch_
 
 - Normally, specify a `restitution` value greater than or equal to `0` and less than `1`.
 - The sign of `gravity` or `acceleration` is ignored; its absolute value is treated as the acceleration magnitude.
-
-##### Example
 
 ```lua
 -- Precisely calculate Y-axis bounce physics with a detailed configuration table
@@ -2518,55 +2232,43 @@ char.stretch_y = b.stretch_y
 
 #### `mt.bounce_ground(ctx, item, groundY, config?)`
 
-API level: `3+`
+since API level 3
 
 A simple convenience function that drops a character or part `item` toward the specified ground Canvas coordinate `groundY` (for example, `0.1`), then makes it bounce and land with a springy motion. `offset_y`, `stretch_x`, and `stretch_y` are applied automatically.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `item` (`table`) Character or part to modify
+- `groundY` (`number` canvas normalized coordinate) Y coordinate at which to land
+- `config` (`table` default `nil`) Settings such as starting position, contact reference, and physical parameters
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `item` | `table` | — | Required | Character or part to modify |
-| `groundY` | `number` | canvas normalized coordinate | Required | Y coordinate at which to land |
-| `config` | `table` | — | `nil` | Settings such as starting position, contact reference, and physical parameters |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | Calculated bounce state |
+RET
+- `table` -- Calculated bounce state
 
 ##### Changes
 
-| Field | Type | Unit | Description |
-|---|---|---|---|
-| `item.offset_y` | `number` | canvas normalized displacement | Sets the calculated Y displacement |
-| `item.offset_x` | `number` | canvas normalized displacement | When `ground_mode = "absolute"`, sets the displacement that preserves the current X position on the canvas |
-| `item.stretch_x` / `item.stretch_y` | `number` | multiplier | Sets the Squash & Stretch from the bounce state |
+- `item.offset_y` : `number` : canvas normalized displacement : Sets the calculated Y displacement
+- `item.offset_x` : `number` : canvas normalized displacement : When `ground_mode = "absolute"`, sets the displacement that preserves the current X position on the canvas
+- `item.stretch_x` / `item.stretch_y` : `number` : multiplier : Sets the Squash & Stretch from the bounce state
 
 ##### `config`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | `ctx.time` | Time to evaluate |
-| `delay` | `number` | seconds | `0.0` | Waiting time before motion begins |
-| `start_mode` | `string` | — | `"absolute"` when `start_y` is specified; otherwise `"relative"` | Reference for the starting position. `"relative"` starts `drop_height` above the current position; `"absolute"` uses `start_y` |
-| `start_y` | `number` | canvas normalized position | `nil` | Starting position used when `start_mode = "absolute"` |
-| `drop_height` | `number` | canvas normalized displacement | `0.3` | Distance above the current position when `start_mode = "relative"` |
-| `ground_mode` | `string` | — | Same as `start_mode` | Reference for the landing position. `"absolute"` treats `groundY` as a fixed position on the canvas; `"relative"` follows transforms higher in the hierarchy |
-| `align_to` | `string` | — | `"bottom"` | Position to place on the ground. `"bottom"` / `"bounds_bottom"` means the bottom edge of the ink bounds, `"baseline"` means the typesetting baseline origin, and `"center"` means the center of the ink bounds |
-| `gravity` | `number` | canvas normalized displacement/second² | `4.0` | Magnitude of acceleration toward the ground |
-| `restitution` | `number` | — | `0.45` | Coefficient of restitution |
-| `start_velocity` | `number` | canvas normalized displacement/second | `0.0` | Initial velocity along the Y axis |
-| `squash` | `number` | factor | `0.15` | Strength with which the contact axis is compressed according to impact velocity |
-| `stretch` | `number` | factor | `0.02` | Strength with which the direction-of-motion axis is extended according to movement velocity |
-| `flexibility` | `number` | radian/second | `16.0` | Oscillation speed when returning to the original shape after impact |
-| `damping` | `number` | 1/second | `7.0` | Rate at which post-impact oscillation settles |
+- `t` : `number` : seconds : `ctx.time` : Time to evaluate
+- `delay` : `number` : seconds : `0.0` : Waiting time before motion begins
+- `start_mode` : `string` : `"absolute"` when `start_y` is specified; otherwise `"relative"` : Reference for the starting position. `"relative"` starts `drop_height` above the current position; `"absolute"` uses `start_y`
+- `start_y` : `number` : canvas normalized position : `nil` : Starting position used when `start_mode = "absolute"`
+- `drop_height` : `number` : canvas normalized displacement : `0.3` : Distance above the current position when `start_mode = "relative"`
+- `ground_mode` : `string` : Same as `start_mode` : Reference for the landing position. `"absolute"` treats `groundY` as a fixed position on the canvas; `"relative"` follows transforms higher in the hierarchy
+- `align_to` : `string` : `"bottom"` : Position to place on the ground. `"bottom"` / `"bounds_bottom"` means the bottom edge of the ink bounds, `"baseline"` means the typesetting baseline origin, and `"center"` means the center of the ink bounds
+- `gravity` : `number` : canvas normalized displacement/second² : `4.0` : Magnitude of acceleration toward the ground
+- `restitution` : `number` : `0.45` : Coefficient of restitution
+- `start_velocity` : `number` : canvas normalized displacement/second : `0.0` : Initial velocity along the Y axis
+- `squash` : `number` : factor : `0.15` : Strength with which the contact axis is compressed according to impact velocity
+- `stretch` : `number` : factor : `0.02` : Strength with which the direction-of-motion axis is extended according to movement velocity
+- `flexibility` : `number` : radian/second : `16.0` : Oscillation speed when returning to the original shape after impact
+- `damping` : `number` : 1/second : `7.0` : Rate at which post-impact oscillation settles
 
 When `ground_mode = "absolute"`, the landing position is calculated using the canvas-space bounding rectangle after rotation and scale have been applied.
-
-##### Example
 
 ```lua
 -- Drop every character vertically from a common fixed screen height (0.85) and land on the BB edge
@@ -2587,53 +2289,41 @@ mt.bounce_ground(ctx, ctx.chars[i], 0.1, {
 
 #### `mt.bounce_wall(ctx, item, wallX, config?)`
 
-API level: `3+`
+since API level 3
 
 A simple convenience function that makes a character or part `item` collide with and bounce off the specified wall Canvas coordinate `wallX` (for example, `0.9`). `offset_x`, `stretch_x`, and `stretch_y` are applied automatically.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `item` (`table`) Character or part to modify
+- `wallX` (`number` canvas normalized coordinate) X coordinate of the collision target
+- `config` (`table` default `nil`) Settings such as starting position, collision reference, and physical parameters
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `item` | `table` | — | Required | Character or part to modify |
-| `wallX` | `number` | canvas normalized coordinate | Required | X coordinate of the collision target |
-| `config` | `table` | — | `nil` | Settings such as starting position, collision reference, and physical parameters |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | Calculated bounce state |
+RET
+- `table` -- Calculated bounce state
 
 ##### Changes
 
-| Field | Type | Unit | Description |
-|---|---|---|---|
-| `item.offset_x` | `number` | canvas normalized displacement | Sets the calculated X displacement |
-| `item.offset_y` | `number` | canvas normalized displacement | When `config.wall_mode = "absolute"`, sets the displacement that preserves the current Y position on the canvas |
-| `item.stretch_x` / `item.stretch_y` | `number` | multiplier | Sets the Squash & Stretch at impact |
+- `item.offset_x` : `number` : canvas normalized displacement : Sets the calculated X displacement
+- `item.offset_y` : `number` : canvas normalized displacement : When `config.wall_mode = "absolute"`, sets the displacement that preserves the current Y position on the canvas
+- `item.stretch_x` / `item.stretch_y` : `number` : multiplier : Sets the Squash & Stretch at impact
 
 ##### `config`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | `ctx.time` | Time to evaluate |
-| `delay` | `number` | seconds | `0.0` | Waiting time before motion begins |
-| `start_mode` | `string` | — | `"absolute"` when `start_x` is specified; otherwise `"relative"` | Reference for the starting position. `"relative"` starts `travel_distance` away from the current position in the direction opposite the wall; `"absolute"` uses `start_x` |
-| `start_x` | `number` | canvas normalized position | `nil` | Starting position used when `start_mode = "absolute"` |
-| `travel_distance` | `number` | canvas normalized displacement | `0.3` | Distance from the current position in the direction opposite the wall when `start_mode = "relative"` |
-| `wall_mode` | `string` | — | Same as `start_mode` | Reference for the collision position. `"absolute"` treats `wallX` as a fixed position on the canvas; `"relative"` follows transforms higher in the hierarchy |
-| `align_to` | `string` | — | Determined from the direction of travel | Position to make contact. Defaults to `"right"` when approaching from the left and `"left"` when approaching from the right. `"bounds_right"`, `"bounds_left"`, and `"center"` can also be specified |
-| `accel` / `acceleration` | `number` | canvas normalized displacement/second² | `4.0` | Magnitude of acceleration toward the wall. `accel` takes precedence |
-| `restitution` | `number` | — | `0.45` | Coefficient of restitution |
-| `start_velocity` | `number` | canvas normalized displacement/second | `0.0` | Initial velocity along the X axis |
-| `squash` | `number` | factor | `0.15` | Strength with which the contact axis is compressed according to impact velocity |
-| `stretch` | `number` | factor | `0.02` | Strength with which the direction-of-motion axis is extended according to movement velocity |
-| `flexibility` | `number` | radian/second | `16.0` | Oscillation speed when returning to the original shape after impact |
-| `damping` | `number` | 1/second | `7.0` | Rate at which post-impact oscillation settles |
-
-##### Example
+- `t` : `number` : seconds : `ctx.time` : Time to evaluate
+- `delay` : `number` : seconds : `0.0` : Waiting time before motion begins
+- `start_mode` : `string` : `"absolute"` when `start_x` is specified; otherwise `"relative"` : Reference for the starting position. `"relative"` starts `travel_distance` away from the current position in the direction opposite the wall; `"absolute"` uses `start_x`
+- `start_x` : `number` : canvas normalized position : `nil` : Starting position used when `start_mode = "absolute"`
+- `travel_distance` : `number` : canvas normalized displacement : `0.3` : Distance from the current position in the direction opposite the wall when `start_mode = "relative"`
+- `wall_mode` : `string` : Same as `start_mode` : Reference for the collision position. `"absolute"` treats `wallX` as a fixed position on the canvas; `"relative"` follows transforms higher in the hierarchy
+- `align_to` : `string` : Determined from the direction of travel : Position to make contact. Defaults to `"right"` when approaching from the left and `"left"` when approaching from the right. `"bounds_right"`, `"bounds_left"`, and `"center"` can also be specified
+- `accel` / `acceleration` : `number` : canvas normalized displacement/second² : `4.0` : Magnitude of acceleration toward the wall. `accel` takes precedence
+- `restitution` : `number` : `0.45` : Coefficient of restitution
+- `start_velocity` : `number` : canvas normalized displacement/second : `0.0` : Initial velocity along the X axis
+- `squash` : `number` : factor : `0.15` : Strength with which the contact axis is compressed according to impact velocity
+- `stretch` : `number` : factor : `0.02` : Strength with which the direction-of-motion axis is extended according to movement velocity
+- `flexibility` : `number` : radian/second : `16.0` : Oscillation speed when returning to the original shape after impact
+- `damping` : `number` : 1/second : `7.0` : Rate at which post-impact oscillation settles
 
 ```lua
 -- Launch every part from a common fixed screen position (0.1) and bounce it off the wall (wallX = 0.9)
@@ -2645,39 +2335,29 @@ mt.bounce_wall(ctx, ctx.parts[i], 0.9, { start_mode = "relative", travel_distanc
 
 #### `mt.impact_squash(config)`
 
-API level: `3+`
+since API level 3
 
 Calculates a **Squash & Stretch impulse that compresses and rebounds at the instant of impact**. It uses the damped oscillation `sin(ωt) * exp(-γt)`, compressing most strongly immediately after impact and returning to the original shape while oscillating.
 
 Because `mt.bounce_*` already applies Squash & Stretch internally, use this function when you want to represent an impact **at timing you control yourself**, such as colliding with another character or hitting something other than the ground.
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `config` | `table` | — | Required | Settings for impact time and deformation characteristics |
+ARGS
+- `config` (`table`) Settings for impact time and deformation characteristics
 
 ##### `config`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | `0.0` | Current time. Before `impact_time`, returns values with no deformation |
-| `impact_time` | `number` | seconds | `0.0` | Time of impact. You can pass `last_impact_time` from `mt.bounce_*` |
-| `squash` | `number` | ratio | `0.15` | Maximum compression amount. With `0.2`, the height is 80% at maximum compression |
-| `stiffness` | `number` | radian/second | `25.0` | Speed of return to the original shape |
-| `damping` | `number` | 1/second | `12.0` | Rate at which oscillation settles |
+- `t` : `number` : seconds : `0.0` : Current time. Before `impact_time`, returns values with no deformation
+- `impact_time` : `number` : seconds : `0.0` : Time of impact. You can pass `last_impact_time` from `mt.bounce_*`
+- `squash` : `number` : ratio : `0.15` : Maximum compression amount. With `0.2`, the height is 80% at maximum compression
+- `stiffness` : `number` : radian/second : `25.0` : Speed of return to the original shape
+- `damping` : `number` : 1/second : `12.0` : Rate at which oscillation settles
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | multiplier | `stretchX`. X-axis stretch factor |
-| `number` | multiplier | `stretchY`. Y-axis stretch factor. It is the reciprocal of `stretchX` to preserve volume |
-| `number` | Ratio of `bounds_height` | `offsetCorrection`. Corrects the contact-position shift caused by compression. Multiply it by `bounds_height` and add it to `offset_y` |
+RET (multiple values)
+1. `number` multiplier -- `stretchX`. X-axis stretch factor
+2. `number` multiplier -- `stretchY`. Y-axis stretch factor. It is the reciprocal of `stretchX` to preserve volume
+3. `number` Ratio of `bounds_height` -- `offsetCorrection`. Corrects the contact-position shift caused by compression. Multiply it by `bounds_height` and add it to `offset_y`
 
 The name and meaning of `squash` are shared with the `squash` setting of `mt.bounce_*`.
-
-##### Example
 
 ```lua
 -- Choose the impact time yourself and apply compression
@@ -2702,53 +2382,41 @@ character.offset_y = character.offset_y + correction * character.geometry.bounds
 
 #### `mt.projectile_2d(config)` / `mt.projectile_2d(t, speed, angle, gravity?, spin?, drag?)`
 
-API level: `3+`
+since API level 3
 
-Calculates **two-dimensional ballistic flight** from initial velocity and gravity. Whereas `mt.bounce_y` / `mt.bounce_x` model motion that hits and rebounds from a surface, this function is intended for **“thrown outward” motion that does not land**, such as scattering fragments, explosions, or tossing objects.
+Closed-form 2D ballistic flight from launch velocity under gravity (cannon launch, falling debris, ballistic trajectory). While `mt.bounce_y` / `mt.bounce_x` model motion that strikes a surface and bounces, this function is for motion that is thrown and does not land (scattered debris, explosions, and tosses).
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `config` | `table` | — | Required | Settings such as elapsed time since launch, initial velocity, direction, and gravity |
+ARGS
+- `config` (`table`) Settings such as elapsed time since launch, initial velocity, direction, and gravity
 
 ##### `config`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | `0.0` | Elapsed time since launch. Negative values are treated as `0` |
-| `speed` | `number` | canvas normalized displacement/second | `0.0` | Initial speed |
-| `angle` | `number` | degrees | `0.0` | Launch direction. `0` points right, and the positive direction is clockwise. `-90` points straight up |
-| `gravity` | `number` | canvas normalized displacement/second² | `4.0` | Downward acceleration |
-| `spin` | `number` | degrees/second | `0.0` | Angular velocity. The returned `rotation` can be assigned directly to the field of the same name |
-| `drag` | `number` | 1/second | `0.0` | Exponential decay rate for air resistance. `0` means no decay |
-| `start_x` / `start_y` | `number` | canvas normalized position | `0.0` | Launch position. If omitted, returns displacement relative to the origin |
+- `t` : `number` : seconds : `0.0` : Elapsed time since launch. Negative values are treated as `0`
+- `speed` : `number` : canvas normalized displacement/second : `0.0` : Initial speed
+- `angle` : `number` : degrees : `0.0` : Launch direction. `0` points right, and the positive direction is clockwise. `-90` points straight up
+- `gravity` : `number` : canvas normalized displacement/second² : `4.0` : Downward acceleration
+- `spin` : `number` : degrees/second : `0.0` : Angular velocity. The returned `rotation` can be assigned directly to the field of the same name
+- `drag` : `number` : 1/second : `0.0` : Exponential decay rate for air resistance. `0` means no decay
+- `start_x` / `start_y` : `number` : canvas normalized position : `0.0` : Launch position. If omitted, returns displacement relative to the origin
 
 ##### Positional-Argument Form
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | `0.0` | Elapsed time since launch. Negative values are treated as `0` |
-| `speed` | `number` | canvas normalized displacement/second | `0.0` | Initial speed |
-| `angle` | `number` | degrees | `0.0` | Launch direction |
-| `gravity` | `number` | canvas normalized displacement/second² | `4.0` | Downward acceleration |
-| `spin` | `number` | degrees/second | `0.0` | Angular velocity |
-| `drag` | `number` | 1/second | `0.0` | Exponential decay rate for air resistance |
+- `t` : `number` : seconds : `0.0` : Elapsed time since launch. Negative values are treated as `0`
+- `speed` : `number` : canvas normalized displacement/second : `0.0` : Initial speed
+- `angle` : `number` : degrees : `0.0` : Launch direction
+- `gravity` : `number` : canvas normalized displacement/second² : `4.0` : Downward acceleration
+- `spin` : `number` : degrees/second : `0.0` : Angular velocity
+- `drag` : `number` : 1/second : `0.0` : Exponential decay rate for air resistance
 
 Because the launch position cannot be specified in positional-argument form, this form returns displacement relative to the origin.
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | In table form, returns a result containing `x`, `y`, `rotation`, `velocity_x`, and `velocity_y`. The same values are also available as `[1]` through `[5]` |
-| Multiple `number` values | As appropriate for each value | In positional-argument form, returns `x`, `y`, `rotation`, `velocity_x`, and `velocity_y`, in that order |
+RET (one of)
+- `table` -- In table form, returns a result containing `x`, `y`, `rotation`, `velocity_x`, and `velocity_y`. The same values are also available as `[1]` through `[5]`
+- Multiple `number` values As appropriate for each value -- In positional-argument form, returns `x`, `y`, `rotation`, `velocity_x`, and `velocity_y`, in that order
 
 > [!IMPORTANT]
 > **The angle is screen-based (clockwise), but the returned `y` uses Canvas coordinates (positive upward).**
 > With `angle = -90` (launched straight up), `y` increases and then begins decreasing under gravity. It can be added directly to `offset_y`.
-
-##### Example
 
 ```lua
 -- Scatter fragments in a fan and make them fall while rotating
@@ -2784,30 +2452,22 @@ the trajectory is rarely the cause — something layered on top of it is:
 
 #### `mt.friction_decay(t, speed, friction)`
 
-API level: `3+`
+since API level 3
 
-Calculates **exponential deceleration** caused by friction. It lets you control motion that “rushes in and glides to a stop” using the physical quantities **initial velocity and coefficient of friction**, rather than arrival time.
+Calculates exponential friction deceleration from initial velocity (sliding stop, braking inertia). It lets you control motion that “rushes in and glides to a stop” using the physical quantities initial velocity and coefficient of friction, rather than arrival time.
 
-##### Arguments
+ARGS
+- `t` (`number` seconds) Elapsed time. Negative values are treated as `0`
+- `speed` (`number` canvas normalized displacement/second) Initial speed
+- `friction` (`number` 1/second default `0.0`) Decay rate. Larger values stop sooner
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | seconds | Required | Elapsed time. Negative values are treated as `0` |
-| `speed` | `number` | canvas normalized displacement/second | Required | Initial speed |
-| `friction` | `number` | 1/second | `0.0` | Decay rate. Larger values stop sooner |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | canvas normalized displacement | `distance`. Distance traveled so far |
-| `number` | canvas normalized displacement/second | `currentSpeed`. Speed at that time |
+RET (multiple values)
+1. `number` canvas normalized displacement -- `distance`. Distance traveled so far
+2. `number` canvas normalized displacement/second -- `currentSpeed`. Speed at that time
 
 The final travel distance converges to `speed / friction`. Conversely, if the stopping distance is known, you can set `speed = distance * friction`.
 
 Choosing between it and `mt.ease.out_expo`: easing represents progress from 0→1 over a fixed duration, whereas this function treats initial velocity and friction as independent physical quantities. This allows adjustments such as **changing only the initial velocity while preserving the character of the deceleration**.
-
-##### Example
 
 ```lua
 -- Slide in from the left and stop through friction
@@ -2825,25 +2485,20 @@ All functions return a new color table and do not modify their arguments.
 
 #### `mt.color.resolve_fill(ctx, target)`
 
-API level: `6+`
+since API level 6
 
 Resolves the fill applied to a character or part and returns its base color,
 fill mode, and object opacity. It is available in `OnLayout` and `OnPath`.
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Current OnLayout or OnPath context |
-| `target` | `character \| part` | — | Required | An element of `ctx.chars` or `ctx.parts` |
+ARGS
+- `ctx` (`table`) Current OnLayout or OnPath context
+- `target` (`character \ part`) Required
 
 ##### Return Values
 
-| Value | Type | Unit | Description |
-|---|---|---|---|
-| `color` | `color` | — | Copy of the resolved solid color, or of `ctx.global.fill.color`, which supplies the starting color for a Global gradient or Crayon |
-| `mode` | `string` | — | `"solid"` / `"gradient"` / `"crayon"` / `"transparent"` |
-| `opacity` | `number` | 0–1 | Product of the Global, owning-character, and target-part `opacity` values, clamped to 0–1 |
+- `color` : `color` : Copy of the resolved solid color, or of `ctx.global.fill.color`, which supplies the starting color for a Global gradient or Crayon
+- `mode` : `string` : `"solid"` / `"gradient"` / `"crayon"` / `"transparent"`
+- `opacity` : `number` : 0–1 : Product of the Global, owning-character, and target-part `opacity` values, clamped to 0–1
 
 For a part, resolution checks `part.fill.use`, then the owning character's
 `fill.use`, then Global. For a character, it checks only the character and
@@ -2871,88 +2526,54 @@ end
 
 #### `mt.color.lerp(from, to, t)`
 
-API level: `1+`
-
 Linearly interpolates two colors component by component (RGBA).
 
-##### Arguments
+ARGS
+- `from` (`color`) Color when `t = 0`
+- `to` (`color`) Color when `t = 1`
+- `t` (`number`) Interpolation factor. Not clamped
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `from` | `color` | — | Required | Color when `t = 0` |
-| `to` | `color` | — | Required | Color when `t = 1` |
-| `t` | `number` | — | Required | Interpolation factor. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `color` | — | New color with each RGBA component interpolated |
+RET
+- `color` -- New color with each RGBA component interpolated
 
 #### `mt.color.from_hsv(hue, saturation, value, alpha?)`
 
-API level: `1+`
-
 Creates a color from normalized HSV values. This is a standard choice for hue animation.
 
-##### Arguments
+ARGS
+- `hue` (`number` 0–1) Hue. `1` completes one full turn, and values outside the range wrap automatically
+- `saturation` (`number` 0–1) Saturation
+- `value` (`number` 0–1) Brightness
+- `alpha` (`number` 0–1 default `1.0`) Alpha value
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `hue` | `number` | 0–1 | Required | Hue. `1` completes one full turn, and values outside the range wrap automatically |
-| `saturation` | `number` | 0–1 | Required | Saturation |
-| `value` | `number` | 0–1 | Required | Brightness |
-| `alpha` | `number` | 0–1 | `1.0` | Alpha value |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `color` | — | RGBA color converted from HSV |
+RET
+- `color` -- RGBA color converted from HSV
 
 #### `mt.color.with_alpha(color, alpha)`
 
-API level: `1+`
-
 Returns a new color with only its alpha replaced, preserving RGB.
 
-##### Arguments
+ARGS
+- `color` (`color`) Original color
+- `alpha` (`number` 0–1) New alpha value
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `color` | `color` | — | Required | Original color |
-| `alpha` | `number` | 0–1 | Required | New alpha value |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `color` | — | New color preserving RGB and replacing only alpha |
+RET
+- `color` -- New color preserving RGB and replacing only alpha
 
 #### `mt.color.from_oklch(lightness, chroma, hue, alpha?)`
 
-API level: `1+`
-
 Generates an RGBA color from the perceptually uniform OKLCH color space.
 
-##### Arguments
+ARGS
+- `lightness` (`number` 0–1) Lightness
+- `chroma` (`number`) Colorfulness. Normally specified from about `0` to `0.4`
+- `hue` (`number` 0–1) Hue. `1` completes one full turn, and values outside the range wrap automatically
+- `alpha` (`number` 0–1 default `1.0`) Alpha value
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `lightness` | `number` | 0–1 | Required | Lightness |
-| `chroma` | `number` | — | Required | Colorfulness. Normally specified from about `0` to `0.4` |
-| `hue` | `number` | 0–1 | Required | Hue. `1` completes one full turn, and values outside the range wrap automatically |
-| `alpha` | `number` | 0–1 | `1.0` | Alpha value |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `color` | — | New color converted to sRGB, with each RGB component constrained to 0–1 |
+RET
+- `color` -- New color converted to sRGB, with each RGB component constrained to 0–1
 
 ### 10. Easing
-
-API level: `1+`
 
 `mt.ease.<name>(t)` accepts progress `t` (normally 0–1) and returns eased progress.
 A typical use is to add character to the linear progress returned by `mt.stagger` or `mt.cycle`.
@@ -2964,563 +2585,60 @@ Names combine a curve type and a direction.
 - `out_` — Deceleration (starts quickly and stops slowly). Suitable for entrances
 - `in_out_` — Accelerates in the first half and decelerates in the second
 
-| Curve | Function Names | Characteristics |
-|---|---|---|
-| Linear | [`linear`](#api-mt-ease-linear) | Constant speed (no change) |
-| Quad | [`in_quad`](#api-mt-ease-in-quad) / [`out_quad`](#api-mt-ease-out-quad) / [`in_out_quad`](#api-mt-ease-in-out-quad) | Gentlest acceleration and deceleration |
-| Cubic | [`in_cubic`](#api-mt-ease-in-cubic) / [`out_cubic`](#api-mt-ease-out-cubic) / [`in_out_cubic`](#api-mt-ease-in-out-cubic) | Standard acceleration and deceleration. Start here when unsure |
-| Quart | [`in_quart`](#api-mt-ease-in-quart) / [`out_quart`](#api-mt-ease-out-quart) / [`in_out_quart`](#api-mt-ease-in-out-quart) | Steeper than Cubic |
-| Sine | [`in_sine`](#api-mt-ease-in-sine) / [`out_sine`](#api-mt-ease-out-sine) / [`in_out_sine`](#api-mt-ease-in-out-sine) | Extremely gentle easing derived from a sine wave |
-| Circ | [`in_circ`](#api-mt-ease-in-circ) / [`out_circ`](#api-mt-ease-out-circ) / [`in_out_circ`](#api-mt-ease-in-out-circ) | Circular-arc curve that rises sharply at the endpoint |
-| Expo | [`in_expo`](#api-mt-ease-in-expo) / [`out_expo`](#api-mt-ease-out-expo) / [`in_out_expo`](#api-mt-ease-in-out-expo) | Extremely strong exponential easing |
-| Back | [`in_back`](#api-mt-ease-in-back) / [`out_back`](#api-mt-ease-out-back) / [`in_out_back`](#api-mt-ease-in-out-back) | **Overshoots once and then returns** (extends outside 0–1) |
-| Elastic | [`in_elastic`](#api-mt-ease-in-elastic) / [`out_elastic`](#api-mt-ease-out-elastic) / [`in_out_elastic`](#api-mt-ease-in-out-elastic) | **Oscillates like a spring before settling** (extends outside 0–1) |
-| Bounce | [`in_bounce`](#api-mt-ease-in-bounce) / [`out_bounce`](#api-mt-ease-out-bounce) / [`in_out_bounce`](#api-mt-ease-in-out-bounce) | Bounces as if against a floor |
+- Linear : Constant speed (no change)
+- Quad : Gentlest acceleration and deceleration
+- Cubic : Standard acceleration and deceleration. Start here when unsure
+- Quart : Steeper than Cubic
+- Sine : Extremely gentle easing derived from a sine wave
+- Circ : Circular-arc curve that rises sharply at the endpoint
+- Expo : Extremely strong exponential easing
+- Back : **Overshoots once and then returns** (extends outside 0–1)
+- Elastic : **Oscillates like a spring before settling** (extends outside 0–1)
+- Bounce : Bounces as if against a floor
 
 Note that Back and Elastic can return values outside the 0–1 range; that excursion is the essence of their effect.
 
-#### `mt.ease.linear(t)`
-
-API level: `1+`
-
-Constant-speed easing that returns the input progress unchanged.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Same value as the input `t` |
-
-#### `mt.ease.in_quad(t)`
-
-API level: `1+`
-
-Quadratic easing that starts slowly and gradually accelerates.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `t²` |
-
-#### `mt.ease.out_quad(t)`
-
-API level: `1+`
-
-Quadratic easing that starts quickly and gradually decelerates.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `1 - (1 - t)²` |
-
-#### `mt.ease.in_out_quad(t)`
-
-API level: `1+`
-
-Quadratic easing that accelerates in the first half and decelerates in the second.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_quad` and `out_quad` around `t = 0.5` |
-
-#### `mt.ease.in_cubic(t)`
-
-API level: `1+`
-
-Cubic easing that starts slowly and gradually accelerates.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `t³` |
-
-#### `mt.ease.out_cubic(t)`
-
-API level: `1+`
-
-Cubic easing that starts quickly and gradually decelerates.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `1 - (1 - t)³` |
-
-#### `mt.ease.in_out_cubic(t)`
-
-API level: `1+`
-
-Cubic easing that accelerates in the first half and decelerates in the second.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_cubic` and `out_cubic` around `t = 0.5` |
-
-#### `mt.ease.in_quart(t)`
-
-API level: `1+`
-
-Quartic easing that starts slowly and accelerates more steeply than Cubic.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `t⁴` |
-
-#### `mt.ease.out_quart(t)`
-
-API level: `1+`
-
-Quartic easing that starts quickly and decelerates more steeply than Cubic.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `1 - (1 - t)⁴` |
-
-#### `mt.ease.in_out_quart(t)`
-
-API level: `1+`
-
-Quartic easing that accelerates in the first half and decelerates in the second.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_quart` and `out_quart` around `t = 0.5` |
-
-#### `mt.ease.in_sine(t)`
-
-API level: `1+`
-
-Sine-wave-derived easing that accelerates extremely gently.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `1 - cos(t × π / 2)` |
-
-#### `mt.ease.out_sine(t)`
-
-API level: `1+`
-
-Sine-wave-derived easing that decelerates extremely gently.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `sin(t × π / 2)` |
-
-#### `mt.ease.in_out_sine(t)`
-
-API level: `1+`
-
-Sine-wave-derived easing that accelerates in the first half and decelerates in the second.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_sine` and `out_sine` around `t = 0.5` |
-
-#### `mt.ease.in_circ(t)`
-
-API level: `1+`
-
-Circular-arc easing that accelerates sharply toward the endpoint.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `1 - √(1 - t²)` |
-
-##### Constraints and Errors
-
-Because the formula contains a square root, normally constrain `t` to 0–1 before use.
-
-#### `mt.ease.out_circ(t)`
-
-API level: `1+`
-
-Circular-arc easing that advances sharply immediately after the start and then decelerates.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress calculated as `√(1 - (1 - t)²)` |
-
-##### Constraints and Errors
-
-Because the formula contains a square root, normally constrain `t` to 0–1 before use.
-
-#### `mt.ease.in_out_circ(t)`
-
-API level: `1+`
-
-Circular-arc easing that accelerates in the first half and decelerates in the second.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_circ` and `out_circ` around `t = 0.5` |
-
-##### Constraints and Errors
-
-Because the formula contains a square root, normally constrain `t` to 0–1 before use.
-
-#### `mt.ease.in_expo(t)`
-
-API level: `1+`
-
-Exponential easing that accelerates extremely strongly toward the endpoint.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | `0` when `t <= 0`; otherwise progress calculated as `2^(10t - 10)` |
-
-#### `mt.ease.out_expo(t)`
-
-API level: `1+`
-
-Exponential easing that advances extremely strongly immediately after the start and then decelerates.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | `1` when `t >= 1`; otherwise progress calculated as `1 - 2^(-10t)` |
-
-#### `mt.ease.in_out_expo(t)`
-
-API level: `1+`
-
-Exponential easing that accelerates extremely strongly in the first half and decelerates extremely strongly in the second.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_expo` and `out_expo` around `t = 0.5` |
-
-#### `mt.ease.in_back(t)`
-
-API level: `1+`
-
-Easing that moves slightly backward in the negative direction immediately after the start, then accelerates toward the endpoint.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that overshoots below 0 near the start |
-
-#### `mt.ease.out_back(t)`
-
-API level: `1+`
-
-Easing that passes slightly beyond the endpoint and then decelerates while returning.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that overshoots above 1 near the endpoint |
-
-#### `mt.ease.in_out_back(t)`
-
-API level: `1+`
-
-Easing that overshoots near both the start and the endpoint.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_back` and `out_back` around `t = 0.5` |
-
-#### `mt.ease.in_elastic(t)`
-
-API level: `1+`
-
-Easing that accelerates toward the endpoint while oscillating with increasing amplitude.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that oscillates outside the 0–1 range. Returns `t` unchanged when `t <= 0` or `t >= 1` |
-
-#### `mt.ease.out_elastic(t)`
-
-API level: `1+`
-
-Easing that decelerates and converges while oscillating around the endpoint.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that oscillates outside the 0–1 range. Returns `t` unchanged when `t <= 0` or `t >= 1` |
-
-#### `mt.ease.in_out_elastic(t)`
-
-API level: `1+`
-
-Easing that accelerates while oscillating in the first half, then decelerates and converges while oscillating in the second.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_elastic` and `out_elastic` around `t = 0.5` |
-
-#### `mt.ease.in_bounce(t)`
-
-API level: `1+`
-
-Easing that bounces at the starting side before moving toward the endpoint.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Time-reversed `out_bounce` progress |
-
-#### `mt.ease.out_bounce(t)`
-
-API level: `1+`
-
-Easing that decelerates toward the endpoint with multiple bounces as if against a floor.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress representing bounces with a piecewise quadratic function |
-
-#### `mt.ease.in_out_bounce(t)`
-
-API level: `1+`
-
-Easing that bounces at both the starting and ending sides.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `t` | `number` | — | Required | Progress. Not clamped |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress that symmetrically combines `in_bounce` and `out_bounce` around `t = 0.5` |
-
-#### `mt.ease.cubic_bezier(x1, y1, x2, y2, t)`
-
-API level: `1+`
-
-Evaluates a cubic Bézier curve compatible with the CSS `cubic-bezier()` timing function.
-Use it to specify arbitrary easing numerically when the predefined curves above are insufficient.
-
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `x1` / `y1` | `number` | — | Required | First control point |
-| `x2` / `y2` | `number` | — | Required | Second control point |
-| `t` | `number` | — | Required | Progress. Fixed at `0` when `t <= 0` and at `1` when `t >= 1` |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | — | Progress on the specified Bézier curve |
-
-##### Constraints and Errors
+Every function below takes one argument `t` (`number`, progress, not clamped) and returns a `number`, except `mt.ease.cubic_bezier`, whose signature is listed with it.
+
+- `mt.ease.linear(t)` : Constant-speed easing that returns the input progress unchanged. : Same value as the input `t`
+- `mt.ease.in_quad(t)` : Quadratic easing that starts slowly and gradually accelerates. : Progress calculated as `t²`
+- `mt.ease.out_quad(t)` : Quadratic easing that starts quickly and gradually decelerates. : Progress calculated as `1 - (1 - t)²`
+- `mt.ease.in_out_quad(t)` : Quadratic easing that accelerates in the first half and decelerates in the second. : Progress that symmetrically combines `in_quad` and `out_quad` around `t = 0.5`
+- `mt.ease.in_cubic(t)` : Cubic easing that starts slowly and gradually accelerates. : Progress calculated as `t³`
+- `mt.ease.out_cubic(t)` : Cubic easing that starts quickly and gradually decelerates. : Progress calculated as `1 - (1 - t)³`
+- `mt.ease.in_out_cubic(t)` : Cubic easing that accelerates in the first half and decelerates in the second. : Progress that symmetrically combines `in_cubic` and `out_cubic` around `t = 0.5`
+- `mt.ease.in_quart(t)` : Quartic easing that starts slowly and accelerates more steeply than Cubic. : Progress calculated as `t⁴`
+- `mt.ease.out_quart(t)` : Quartic easing that starts quickly and decelerates more steeply than Cubic. : Progress calculated as `1 - (1 - t)⁴`
+- `mt.ease.in_out_quart(t)` : Quartic easing that accelerates in the first half and decelerates in the second. : Progress that symmetrically combines `in_quart` and `out_quart` around `t = 0.5`
+- `mt.ease.in_sine(t)` : Sine-wave-derived easing that accelerates extremely gently. : Progress calculated as `1 - cos(t × π / 2)`
+- `mt.ease.out_sine(t)` : Sine-wave-derived easing that decelerates extremely gently. : Progress calculated as `sin(t × π / 2)`
+- `mt.ease.in_out_sine(t)` : Sine-wave-derived easing that accelerates in the first half and decelerates in the second. : Progress that symmetrically combines `in_sine` and `out_sine` around `t = 0.5`
+- `mt.ease.in_circ(t)` : Circular-arc easing that accelerates sharply toward the endpoint. : Progress calculated as `1 - √(1 - t²)`
+- `mt.ease.out_circ(t)` : Circular-arc easing that advances sharply immediately after the start and then decelerates. : Progress calculated as `√(1 - (1 - t)²)`
+- `mt.ease.in_out_circ(t)` : Circular-arc easing that accelerates in the first half and decelerates in the second. : Progress that symmetrically combines `in_circ` and `out_circ` around `t = 0.5`
+- `mt.ease.in_expo(t)` : Exponential easing that accelerates extremely strongly toward the endpoint. : `0` when `t <= 0`; otherwise progress calculated as `2^(10t - 10)`
+- `mt.ease.out_expo(t)` : Exponential easing that advances extremely strongly immediately after the start and then decelerates. : `1` when `t >= 1`; otherwise progress calculated as `1 - 2^(-10t)`
+- `mt.ease.in_out_expo(t)` : Exponential easing that accelerates extremely strongly in the first half and decelerates extremely strongly in the second. : Progress that symmetrically combines `in_expo` and `out_expo` around `t = 0.5`
+- `mt.ease.in_back(t)` : Easing that moves slightly backward in the negative direction immediately after the start, then accelerates toward the endpoint. : Progress that overshoots below 0 near the start
+- `mt.ease.out_back(t)` : Easing that passes slightly beyond the endpoint and then decelerates while returning. : Progress that overshoots above 1 near the endpoint
+- `mt.ease.in_out_back(t)` : Easing that overshoots near both the start and the endpoint. : Progress that symmetrically combines `in_back` and `out_back` around `t = 0.5`
+- `mt.ease.in_elastic(t)` : Easing that accelerates toward the endpoint while oscillating with increasing amplitude. : Progress that oscillates outside the 0–1 range. Returns `t` unchanged when `t <= 0` or `t >= 1`
+- `mt.ease.out_elastic(t)` : Easing that decelerates and converges while oscillating around the endpoint. : Progress that oscillates outside the 0–1 range. Returns `t` unchanged when `t <= 0` or `t >= 1`
+- `mt.ease.in_out_elastic(t)` : Easing that accelerates while oscillating in the first half, then decelerates and converges while oscillating in the second. : Progress that symmetrically combines `in_elastic` and `out_elastic` around `t = 0.5`
+- `mt.ease.in_bounce(t)` : Easing that bounces at the starting side before moving toward the endpoint. : Time-reversed `out_bounce` progress
+- `mt.ease.out_bounce(t)` : Easing that decelerates toward the endpoint with multiple bounces as if against a floor. : Progress representing bounces with a piecewise quadratic function
+- `mt.ease.in_out_bounce(t)` : Easing that bounces at both the starting and ending sides. : Progress that symmetrically combines `in_bounce` and `out_bounce` around `t = 0.5`
+- `mt.ease.cubic_bezier(x1, y1, x2, y2, t)` : Evaluates a cubic Bézier curve compatible with the CSS `cubic-bezier()` timing function. Use it to specify arbitrary easing numerically when the predefined curves above are insufficient. : Progress on the specified Bézier curve
+
+The three `circ` functions contain a square root, so normally constrain `t` to 0–1 before use.
+
+##### `mt.ease.cubic_bezier` arguments
+
+- `x1` / `y1` : `number` : Required : First control point
+- `x2` / `y2` : `number` : Required : Second control point
+- `t` : `number` : Required : Progress. Fixed at `0` when `t <= 0` and at `1` when `t >= 1`
 
 When using it as a CSS-compatible monotonic timing curve, keep `x1` and `x2` within 0–1.
-
-##### Example
 
 ```lua
 -- Same curve as CSS ease-in-out
@@ -3531,45 +2649,36 @@ local eased = mt.ease.cubic_bezier(0.42, 0.0, 0.58, 1.0, progress)
 
 #### `mt.layout.reflow(ctx, gap?, config?)`
 
-API level: `2+`
+since API level 2
 
 For horizontal writing, uses `geometry.canvas_origin_*`; for vertical writing, uses `geometry.vertical_origin_*`. It applies the current `scale * stretch` to the advance while preserving spacing derived from shaping, kerning, tracking, and margins based on differences between adjacent natural origins. Per-character rotation and pivot are also included in origin alignment. This function does not equalize the distance between visible ink outlines.
 
-##### Arguments
-
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `gap` | `number` | Ratio of canvas width or height | `0.0` | Extra spacing added to adjacent advances. Positive values increase spacing in the direction of progression |
-| `config` | `table` | — | `nil` | Settings for reflow direction, targets, and fixed position |
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `gap` (`number` Ratio of canvas width or height default `0.0`) Extra spacing added to adjacent advances. Positive values increase spacing in the direction of progression
+- `config` (`table` default `nil`) Settings for reflow direction, targets, and fixed position
 
 ##### `config`
 
-| Field | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `mode` | `string` | — | Determined from `ctx.global.vertical` | Direction to reflow: `"horizontal"` or `"vertical"` |
-| `targets` | `table` | — | All characters | Array of 1-based character indices to reflow. If characters between targets are skipped, their advances are included in the calculation, but their coordinates are not changed |
-| `anchor` | `integer` | — | First character in each line/column | Character index whose current transformed typesetting origin is fixed while characters are arranged on both sides |
+- `mode` : `string` : Determined from `ctx.global.vertical` : Direction to reflow: `"horizontal"` or `"vertical"`
+- `targets` : `table` : All characters : Array of 1-based character indices to reflow. If characters between targets are skipped, their advances are included in the calculation, but their coordinates are not changed
+- `anchor` : `integer` : First character in each line/column : Character index whose current transformed typesetting origin is fixed while characters are arranged on both sides
 
 When `targets` is omitted, all characters are reflowed with each `line_index` treated as an independent line/column, and the first character of each is fixed. When `config.anchor` is specified, only the line containing that character uses it as the fixed character.
 
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
 Rewrites `offset_x` and `offset_y` for the target characters. Call it after setting size, rotation, and pivot animations, as the final layout operation for the frame.
 
-##### Constraints and Errors
+ERRORS
 
 - Specify `"horizontal"` or `"vertical"` for `mode`.
 - Indices in `targets` must be within the valid range, strictly ascending, and free of duplicates.
 - All characters included in `targets` must belong to the same `line_index`.
 - When `targets` is specified, `anchor` must identify a character included in that array.
 - When `targets` is omitted, `anchor` must be a valid character index.
-
-##### Example
 
 ```lua
 mt.layout.reflow(ctx, 0.02, {
@@ -3580,32 +2689,22 @@ mt.layout.reflow(ctx, 0.02, {
 
 #### `mt.layout.group_by_line(ctx)`
 
-API level: `4+`
+since API level 4
 
 Groups shaped characters by `line_index` and returns them in the host’s reading order.
 The groups represent lines in horizontal writing and columns in vertical writing. It does not modify layout or character properties.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | Array containing one group per `line_index`, ordered by typeset line/column order |
+RET
+- `table` -- Array containing one group per `line_index`, ordered by typeset line/column order
 
 Each group has the following fields.
 
-| Field | Type | Unit | Description |
-|---|---|---|---|
-| `line_index` | `integer` | — | Index of the line/column corresponding to the group |
-| `item_count` | `integer` | items | Number of characters in the group |
-| `items` | `table` | — | Array of characters in reading order |
-
-##### Example
+- `line_index` : `integer` : Index of the line/column corresponding to the group
+- `item_count` : `integer` : items : Number of characters in the group
+- `items` : `table` : Array of characters in reading order
 
 ```lua
 local columns = mt.layout.group_by_line(ctx)
@@ -3621,37 +2720,29 @@ end
 
 #### `mt.layout.place_2d(ctx, item, canvasX, canvasY)`
 
-API level: `2+`
+since API level 2
 
 Precisely places the anchor of a character or part at a canvas normalized position **before 3D, camera, projection, and Deform are applied**. It composes and inverts the `offset` / `pivot` / `rotation` / `scale` / `stretch` of Global, the owning character, and the target itself using the same hierarchy and the same pixel coordinates for a non-square canvas as Native rendering.
 
 - Character anchor: natural ink bounds center `geometry.bounds_center_x/y`
 - Part anchor: part-local natural center (the local origin of the rendered path)
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `item` (`table`) Target character or part
+- `canvasX` / `canvasY` (`number` canvas normalized position) Destination coordinates
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `item` | `table` | — | Required | Target character or part |
-| `canvasX` / `canvasY` | `number` | canvas normalized position | Required | Destination coordinates |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | canvas normalized displacement | The assigned `offsetX` |
-| `number` | canvas normalized displacement | The assigned `offsetY` |
+RET (multiple values)
+1. `number` canvas normalized displacement -- The assigned `offsetX`
+2. `number` canvas normalized displacement -- The assigned `offsetY`
 
 ##### Changes
 
 Directly updates the target’s `offset_x` and `offset_y`.
 
-##### Constraints and Errors
+ERRORS
 
 If `scale * stretch` is 0 anywhere in the transform hierarchy, the transform cannot be inverted and an error occurs.
-
-##### Example
 
 ```lua
 mt.layout.place_2d(ctx, ctx.chars[1], 0.8, 0.8)
@@ -3660,25 +2751,17 @@ mt.layout.place_2d(ctx, ctx.parts[1], 0.5, 0.5)
 
 #### `mt.layout.get_canvas_position_2d(ctx, item)`
 
-API level: `3+`
+since API level 3
 
 Gets the current Canvas coordinates `(canvasX, canvasY)` of a character or part anchor before 3D transforms, in the normalized Y-up coordinate system from 0.0 to 1.0. The function automatically determines whether `item` is a character (`ctx.chars[i]`) or a part (`ctx.parts[j]`).
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `item` (`table`) Target character or part
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `item` | `table` | — | Required | Target character or part |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | canvas normalized position | Anchor `canvasX` |
-| `number` | canvas normalized position | Anchor `canvasY` |
-
-##### Example
+RET (multiple values)
+1. `number` canvas normalized position -- Anchor `canvasX`
+2. `number` canvas normalized position -- Anchor `canvasY`
 
 ```lua
 -- Get the Canvas position of a character
@@ -3690,32 +2773,24 @@ local partX, partY = mt.layout.get_canvas_position_2d(ctx, ctx.parts[1])
 
 #### `mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY)`
 
-API level: `3+`
+since API level 3
 
 Calculates and returns the `offset_x` and `offset_y` required to place a character or part at the specified Canvas coordinates `(canvasX, canvasY)` before 3D transforms, without rewriting the properties themselves. The type is detected automatically from the character or part passed as `item`.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `item` (`table`) Target character or part
+- `canvasX` / `canvasY` (`number` canvas normalized position) Destination coordinates
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `item` | `table` | — | Required | Target character or part |
-| `canvasX` / `canvasY` | `number` | canvas normalized position | Required | Destination coordinates |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | canvas normalized displacement | Required `offsetX` |
-| `number` | canvas normalized displacement | Required `offsetY` |
+RET (multiple values)
+1. `number` canvas normalized displacement -- Required `offsetX`
+2. `number` canvas normalized displacement -- Required `offsetY`
 
 The target’s fields are not modified.
 
-##### Constraints and Errors
+ERRORS
 
 An error occurs if `scale * stretch` is 0 in the parent hierarchy being inverted.
-
-##### Example
 
 ```lua
 -- Invert the transform to obtain the offset needed to place a character at Target Canvas coordinates (0.5, 0.8)
@@ -3727,28 +2802,20 @@ local pox, poy = mt.layout.canvas_to_offset_2d(ctx, ctx.parts[1], 0.2, 0.3)
 
 #### `mt.layout.radial_distance(ctx, canvasX, canvasY, centerX?, centerY?)`
 
-API level: `3+`
+since API level 3
 
 Returns the distance from the center of a radial effect to the specified Canvas coordinates. If `centerX` / `centerY` are omitted, the center of the screen `(0.5, 0.5)` is used.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Context containing canvas information
+- `canvasX` / `canvasY` (`number` canvas normalized position) Coordinates to measure
+- `centerX` / `centerY` (`number` canvas normalized position default `0.5`) Center of the effect
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Context containing canvas information |
-| `canvasX` / `canvasY` | `number` | canvas normalized position | Required | Coordinates to measure |
-| `centerX` / `centerY` | `number` | canvas normalized position | `0.5` | Center of the effect |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | Ratio of canvas height | Aspect-ratio-corrected distance from the center |
+RET
+- `number` Ratio of canvas height -- Aspect-ratio-corrected distance from the center
 
 > [!IMPORTANT]
 > **The aspect ratio is corrected.** In normalized Canvas coordinates, a physical length of 1.0 differs between the horizontal and vertical axes. If distance is calculated simply as `sqrt(dx² + dy²)`, intended concentric circles become **squashed into ellipses** in a wide project such as 16:9. This function corrects the horizontal direction by multiplying it by `ctx.canvas.aspect_ratio`, so the returned distance is always based on true circles.
-
-##### Example
 
 ```lua
 -- A ripple expanding from the center. The crest passes each character according to its distance
@@ -3763,22 +2830,17 @@ end
 
 #### `mt.layout.pivot_at_2d(ctx, item, anchor)`
 
-API level: `4+`
+since API level 4
 
 Automatically determines whether the target is a character or part and sets its pivot to a semantic 2D position. It corrects `offset_x/y` by the difference between the local 2D matrices before and after the change, so the current pose before 3D application from rotation, scale, and stretch does not move.
 Global is not supported. Preserving the visual result after yaw, pitch, z, camera, or projection is outside its scope.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `item` (`table`) Target character or part
+- `anchor` (`string`) Name of the semantic 2D position to set
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `item` | `table` | — | Required | Target character or part |
-| `anchor` | `string` | — | Required | Name of the semantic 2D position to set |
-
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
@@ -3790,8 +2852,6 @@ Shared anchors are `"center"`, `"top"`, `"bottom"`, `"left"`, `"right"`, `"top_l
 
 Existing pivot values are not 0–1 ratios within the bounds. `0.5` is the natural center; X is displacement as a ratio of canvas width, and Y is displacement as a ratio of canvas height. This function converts the bounds dimensions, character typesetting origin, and differing natural centers of characters and parts into the existing pivot units.
 
-##### Example
-
 ```lua
 mt.layout.pivot_at_2d(ctx, character, "top")
 character.rotation = math.sin(ctx.time * 3.0) * 8.0
@@ -3801,37 +2861,29 @@ character.rotation = math.sin(ctx.time * 3.0) * 8.0
 
 #### `mt.layout.measure_bounds_2d(ctx, targets?, targetType?)`
 
-API level: `2+`
+since API level 2
 
 Transforms the natural bounding rectangles of the specified targets through the complete Global→character→part 2D hierarchy, then returns canvas-axis-aligned bounds enclosing all their vertices. When characters are specified, the natural bounds of their owned parts are combined; characters with no parts use the character’s natural bounds. Call it after writing the target fields.
 
 These bounds are **before 3D, camera, projection, and Deform are applied**. They do not include stroke or shadow overhang, nor path-tight bounds for outlines containing whitespace within their natural bounding rectangle. For this stage and definition, the result is not an approximation: it incorporates rotation, pivot, negative stretch, parent-character transforms, and Global transforms.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `targets` (`table \ nil`) All
+- `targetType` (`string` default `"character"`) Target type: `"character"` or `"part"`
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `targets` | `table \| nil` | — | All | Array of 1-based character or part indices. `nil` selects every target of the requested type |
-| `targetType` | `string` | — | `"character"` | Target type: `"character"` or `"part"` |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | Bounds enclosing all valid targets |
-| `nil` | — | If there are no valid targets |
+RET (one of)
+- `table` -- Bounds enclosing all valid targets
+- `nil` -- If there are no valid targets
 
 The bounds table has the following fields. All coordinate systems are Y-up.
 
-| Field | Type | Unit | Description |
-|---|---|---|---|
-| `left` / `right` | `number` | canvas normalized position | Left and right edges |
-| `bottom` / `top` | `number` | canvas normalized position | Bottom and top edges |
-| `center_x` / `center_y` | `number` | canvas normalized position | Center of the bounds |
-| `width` / `height` | `number` | canvas normalized displacement | Width and height of the bounds |
+- `left` / `right` : `number` : canvas normalized position : Left and right edges
+- `bottom` / `top` : `number` : canvas normalized position : Bottom and top edges
+- `center_x` / `center_y` : `number` : canvas normalized position : Center of the bounds
+- `width` / `height` : `number` : canvas normalized displacement : Width and height of the bounds
 
-##### Constraints and Errors
+ERRORS
 
 Selecting all targets by omitting `targets` is available from API level 6.
 `targetType = "character"` selects every character, while `"part"` selects
@@ -3842,8 +2894,6 @@ All-character selection includes characters with no parts and uses their
 natural character bounds. All-part selection includes only elements present
 in `ctx.parts`. Visibility, opacity, and write-on state do not affect target
 selection; this function measures the specified geometry.
-
-##### Example
 
 ```lua
 local bounds = mt.layout.measure_bounds_2d(ctx, {1, 2, 3})
@@ -3859,30 +2909,24 @@ local allPartBounds = mt.layout.measure_bounds_2d(ctx, nil, "part")
 
 #### `mt.layout.queue_on_path(ctx, path, options?)`
 
-API level: `3+`
+since API level 3
 
 Arranges characters (or parts) on a path created by `mt.path.arc_length` **in reading order**, and returns the distance ratio (0–1) occupied by each element.
 
 Spacing is derived from the origin spacing that the **host actually typeset**, using the same method as `mt.layout.reflow`. Parameter settings such as `tracking`, per-character `margins`, and kerning are therefore reflected directly in the character advance along the path. `options.gap` is **additional spacing** added on top of that, so when `gap` is `0`, elements are arranged according to the host’s character advance.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) `OnLayout` context
+- `path` (`table`) Return value of `mt.path.arc_length`
+- `options` (`table` default `nil`) Placement settings
+- `options.align` (`string` default `"end"`) Position at which to place the string. Specify `"end"`, `"start"`, or `"center"`
+- `options.gap` (`number` Ratio of canvas width default `0.0`) Additional spacing added to the host’s character advance
+- `options.mode` (`string` default `"horizontal"`) Host typesetting direction: `"horizontal"` or `"vertical"`
+- `options.target_type` (`string` default `"character"`) Target type: `"character"` or `"part"`
+- `options.targets` (`table` default All elements) Array of target indices in reading order
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | `OnLayout` context |
-| `path` | `table` | — | Required | Return value of `mt.path.arc_length` |
-| `options` | `table` | — | `nil` | Placement settings |
-| `options.align` | `string` | — | `"end"` | Position at which to place the string. Specify `"end"`, `"start"`, or `"center"` |
-| `options.gap` | `number` | Ratio of canvas width | `0.0` | Additional spacing added to the host’s character advance |
-| `options.mode` | `string` | — | `"horizontal"` | Host typesetting direction: `"horizontal"` or `"vertical"` |
-| `options.target_type` | `string` | — | `"character"` | Target type: `"character"` or `"part"` |
-| `options.targets` | `table` | — | All elements | Array of target indices in reading order |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | 0–1 | `slots` array indexed like `ctx.chars` or `ctx.parts`, providing the distance ratio occupied by each element on the path |
+RET
+- `table` 0–1 -- `slots` array indexed like `ctx.chars` or `ctx.parts`, providing the distance ratio occupied by each element on the path
 
 `slots` represents positions on the path, not animation progress.
 
@@ -3905,19 +2949,13 @@ local slots = mt.layout.queue_on_path(ctx, path, { targets = targets })
 
 This is a tradeoff: the following two properties cannot both be satisfied on a reversed path. Choose according to the use case.
 
-| `targets` | On-Screen Arrangement | Front of the Queue |
-|---|---|---|
-| Omitted (ascending index) | Reversed (read right→left) | Character 1 |
-| Reverse reading order | Correct (read left→right) | Last character |
+- Omitted (ascending index) : Reversed (read right→left) : Character 1
+- Reverse reading order : Correct (read left→right) : Last character
 
 `align` is likewise relative to the direction of travel. `"end"` places the end of the string at the **end of the path**, so on a path traveling right to left, the end of the string appears on the **left side** of the screen.
 
-| Path Direction | Position of the String End with `align = "end"` |
-|---|---|
-| Left→right | Right side of the screen |
-| Right→left | Left side of the screen |
-
-##### Example
+- Left→right : Right side of the screen
+- Right→left : Left side of the screen
 
 ```lua
 -- Use case 1: Arrange text along a path (stationary)
@@ -3960,30 +2998,20 @@ Every function returns four values: `x, y, tangentX, tangentY`. `tangentX` / `ta
 
 #### `mt.path.bezier(p0, p1, p2, p3, t)`
 
-API level: `1+`
-
 Returns the coordinates and tangent on a cubic Bézier curve defined by four points.
 
-##### Arguments
+ARGS
+- `p0` (`table` coordinates) Starting point `{ x, y }`
+- `p1` (`table` coordinates) Control point near the start `{ x, y }`
+- `p2` (`table` coordinates) Control point near the end `{ x, y }`
+- `p3` (`table` coordinates) End point `{ x, y }`
+- `t` (`number` 0–1) Position on the curve. Values outside the range are not clamped and are extrapolated unchanged
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `p0` | `table` | coordinates | Required | Starting point `{ x, y }` |
-| `p1` | `table` | coordinates | Required | Control point near the start `{ x, y }` |
-| `p2` | `table` | coordinates | Required | Control point near the end `{ x, y }` |
-| `p3` | `table` | coordinates | Required | End point `{ x, y }` |
-| `t` | `number` | 0–1 | Required | Position on the curve. Values outside the range are not clamped and are extrapolated unchanged |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | As defined by the input coordinates | `x` on the curve |
-| `number` | As defined by the input coordinates | `y` on the curve |
-| `number` | As defined by the input coordinates | Tangent `tangentX` |
-| `number` | As defined by the input coordinates | Tangent `tangentY` |
-
-##### Example
+RET (multiple values)
+1. `number` As defined by the input coordinates -- `x` on the curve
+2. `number` As defined by the input coordinates -- `y` on the curve
+3. `number` As defined by the input coordinates -- Tangent `tangentX`
+4. `number` As defined by the input coordinates -- Tangent `tangentY`
 
 ```lua
 -- Make the character follow an arc and land at its own natural position
@@ -3999,31 +3027,21 @@ character.offset_y = y
 
 #### `mt.path.catmull_rom(points, t)`
 
-API level: `1+`
-
 Returns the coordinates and tangent on a Catmull-Rom spline passing through any number of control points. Unlike a Bézier curve, this curve passes exactly through every point in the list.
 
-##### Arguments
+ARGS
+- `points` (`table` coordinates) 1-based array containing at least two `{ x, y }` points through which the curve passes
+- `t` (`number` 0–1) Progress across the entire curve. Clamped to 0–1
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `points` | `table` | coordinates | Required | 1-based array containing at least two `{ x, y }` points through which the curve passes |
-| `t` | `number` | 0–1 | Required | Progress across the entire curve. Clamped to 0–1 |
+RET (multiple values)
+1. `number` As defined by the input coordinates -- `x` on the curve
+2. `number` As defined by the input coordinates -- `y` on the curve
+3. `number` As defined by the input coordinates -- Tangent `tangentX`
+4. `number` As defined by the input coordinates -- Tangent `tangentY`
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | As defined by the input coordinates | `x` on the curve |
-| `number` | As defined by the input coordinates | `y` on the curve |
-| `number` | As defined by the input coordinates | Tangent `tangentX` |
-| `number` | As defined by the input coordinates | Tangent `tangentY` |
-
-##### Constraints and Errors
+ERRORS
 
 `points` must contain at least two points.
-
-##### Example
 
 ```lua
 -- Flow the character along a trajectory passing through three predetermined points
@@ -4040,35 +3058,27 @@ character.offset_y = y
 
 #### `mt.path.arc_length(points, aspectRatio?, options?)`
 
-API level: `3+`
+since API level 3
 
 Constructs an **arc-length-parameterized** path from control points. The two functions above evaluate using curve parameter `t`, but **equal intervals of `t` are not equal distances**. Samples bunch together where the curve bends, so uses that require spacing by distance, such as queues, character advance along a path, or constant-speed motion, require a cumulative-length table. This function constructs that table once and provides distance-based lookup.
 
 Passing `ctx.canvas.aspect_ratio` as `aspectRatio` multiplies X differences by it to equalize the meaning of distance on the horizontal and vertical axes. If omitted, distance is measured directly in normalized units, causing spacing to expand or contract on a non-square canvas.
 
-##### Arguments
+ARGS
+- `points` (`table` coordinates) 1-based control-point array. Specifying canvas normalized coordinates allows use with `mt.layout.place_2d` and `mt.layout.queue_on_path`
+- `aspectRatio` (`number` default `1.0`) Aspect ratio multiplied into X-axis distances. Normally pass `ctx.canvas.aspect_ratio`
+- `options` (`table` default `nil`) Settings specifying the curve type
+- `options.kind` (`string` default `"catmull_rom"`) `"catmull_rom"` or `"bezier"`
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `points` | `table` | coordinates | Required | 1-based control-point array. Specifying canvas normalized coordinates allows use with `mt.layout.place_2d` and `mt.layout.queue_on_path` |
-| `aspectRatio` | `number` | — | `1.0` | Aspect ratio multiplied into X-axis distances. Normally pass `ctx.canvas.aspect_ratio` |
-| `options` | `table` | — | `nil` | Settings specifying the curve type |
-| `options.kind` | `string` | — | `"catmull_rom"` | `"catmull_rom"` or `"bezier"` |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | Path object providing distance-based lookup |
+RET
+- `table` -- Path object providing distance-based lookup
 
 The path object has the following methods.
 
-| Method | Return Value | Unit | Description |
-|---|---|---|---|
-| <a id="api-path-length"></a>`path:length()` | `number` | As defined by the input coordinates | Total path length corrected for aspect ratio |
-| <a id="api-path-at-distance"></a>`path:at_distance(distanceRatio)` | Three `number` values | As defined by the input coordinates, degrees | `x`, `y`, and `headingDegrees` at distance ratio 0–1 |
+- `path:length()` : `number` : As defined by the input coordinates : Total path length corrected for aspect ratio
+- `path:at_distance(distanceRatio)` : Three `number` values : As defined by the input coordinates, degrees : `x`, `y`, and `headingDegrees` at distance ratio 0–1
 
-##### Constraints and Errors
+ERRORS
 
 - `points` must contain at least two points.
 - With `options.kind = "bezier"`, `points` must contain exactly four points.
@@ -4085,8 +3095,6 @@ The direction **follows the direction of travel**. On a path traveling from righ
 character.rotation = heading + 180.0
 ```
 
-##### Example
-
 ```lua
 -- Place at equal distance intervals (equal intervals of t bunch up around bends)
 local path = mt.path.arc_length(kWaypoints, ctx.canvas.aspect_ratio)
@@ -4102,23 +3110,17 @@ end
 
 #### `mt.svg_path(source, optionsOrSourceUnitsPerEm?)`
 
-API level: `5+`
+since API level 5
 
 Converts a string in the same format as an SVG `d` attribute into a reusable, read-only path template.
 As a simplified SVG-compatible implementation, it supports absolute and relative `M` / `L` / `H` / `V` / `Q` / `T` / `C` / `S` / `Z` commands and consecutive coordinate sets. Elliptical arcs `A` / `a` are not supported.
 
-##### Arguments
+ARGS
+- `source` (`string`) SVG path data
+- `optionsOrSourceUnitsPerEm` (`number` / `table` default `nil`) Number of source-data units per em, or `{ view_box, em_scale }`
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `source` | `string` | — | Required | SVG path data |
-| `optionsOrSourceUnitsPerEm` | `number` / `table` | — | `nil` | Number of source-data units per em, or `{ view_box, em_scale }` |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `MtDrawingPath` | — | Read-only path template that can be passed to `path:assign(template)` |
+RET
+- `MtDrawingPath` -- Read-only path template that can be passed to `path:assign(template)`
 
 ##### Normalization Settings
 
@@ -4126,14 +3128,12 @@ When a number is specified, it is treated as the number of source-data units per
 
 When `view_box = { minX, minY, width, height }` is specified, the viewBox center is moved to the origin, and the longest side is scaled to `em_scale` em while preserving the aspect ratio. The default `em_scale` is `1.0`.
 
-##### Constraints and Errors
+ERRORS
 
 - A numeric units-per-em value must be a finite positive number.
 - `view_box` must contain four finite numbers, and its width and height must be positive.
 - `em_scale` must be a finite positive number.
 - `units_per_em` cannot be specified in the configuration table. Use the numeric form or `em_scale`.
-
-##### Example
 
 ```lua
 local icon = mt.svg_path(svgPathFrom24PxIcon, {
@@ -4158,20 +3158,18 @@ For a static SVG string, convert it with `mt.svg_path` outside the function and 
 
 #### Drawing Path Editing API
 
-API level: `5+`
+since API level 5
 
 The `path` of a part obtained through `ctx.paths` can be edited with the following methods.
 
-| Method | Description |
-|---|---|
-| [`path:clear()`](#api-path-clear) | Delete every command in the path |
-| [`path:assign(template)`](#api-path-assign) | Replace with a template created by `mt.svg_path` |
-| [`path:set_svg(source)`](#api-path-set-svg) | Parse SVG path data and replace the path |
-| [`path:move_to(x, y)`](#api-path-move-to) | Add the starting point of a subpath |
-| [`path:line_to(x, y)`](#api-path-line-to) | Add a line |
-| [`path:quad_to(cx, cy, x, y)`](#api-path-quad-to) | Add a quadratic Bézier curve |
-| [`path:cubic_to(cx1, cy1, cx2, cy2, x, y)`](#api-path-cubic-to) | Add a cubic Bézier curve |
-| [`path:close()`](#api-path-close) | Close the current subpath |
+- [`path:clear()`](#api-path-clear) : Delete every command in the path
+- [`path:assign(template)`](#api-path-assign) : Replace with a template created by `mt.svg_path`
+- [`path:set_svg(source)`](#api-path-set-svg) : Parse SVG path data and replace the path
+- [`path:move_to(x, y)`](#api-path-move-to) : Add the starting point of a subpath
+- [`path:line_to(x, y)`](#api-path-line-to) : Add a line
+- [`path:quad_to(cx, cy, x, y)`](#api-path-quad-to) : Add a quadratic Bézier curve
+- [`path:cubic_to(cx1, cy1, cx2, cy2, x, y)`](#api-path-cubic-to) : Add a cubic Bézier curve
+- [`path:close()`](#api-path-close) : Close the current subpath
 
 ##### Coordinate System
 
@@ -4185,13 +3183,11 @@ Parts to which changes are not applied revert to the original glyph outline.
 
 #### `path:clear()`
 
-API level: `5+`
+since API level 5
 
 Deletes all commands in the path.
 
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
@@ -4199,19 +3195,14 @@ Empties the target path and resets its coordinate-normalization settings to thei
 
 #### `path:assign(template)`
 
-API level: `5+`
+since API level 5
 
 Replaces the path with the contents of a template created by `mt.svg_path`.
 
-##### Arguments
+ARGS
+- `template` (`MtDrawingPath`) Source path template to copy
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `template` | `MtDrawingPath` | — | Required | Source path template to copy |
-
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
@@ -4219,19 +3210,14 @@ Replaces the target’s path data and coordinate-normalization settings with the
 
 #### `path:set_svg(source)`
 
-API level: `5+`
+since API level 5
 
 Parses SVG path data and replaces the target path.
 
-##### Arguments
+ARGS
+- `source` (`string`) Path data in the same format as an SVG `d` attribute
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `source` | `string` | — | Required | Path data in the same format as an SVG `d` attribute |
-
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
@@ -4239,112 +3225,90 @@ Replaces the target path with the specified SVG path and resets its coordinate-n
 
 #### `path:move_to(x, y)`
 
-API level: `5+`
+since API level 5
 
 Adds a new subpath beginning at the specified coordinates.
 
-##### Arguments
+ARGS
+- `x` / `y` (`number` Path-local coordinates) Starting point of the subpath
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `x` / `y` | `number` | Path-local coordinates | Required | Starting point of the subpath |
-
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
 Adds a move command to the target path.
 
-##### Constraints and Errors
+ERRORS
 
 Coordinates must be finite numbers.
 
 #### `path:line_to(x, y)`
 
-API level: `5+`
+since API level 5
 
 Adds a straight line from the current position to the specified coordinates.
 
-##### Arguments
+ARGS
+- `x` / `y` (`number` Path-local coordinates) End point of the line
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `x` / `y` | `number` | Path-local coordinates | Required | End point of the line |
-
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
 Adds a line command to the target path.
 
-##### Constraints and Errors
+ERRORS
 
 Coordinates must be finite numbers.
 
 #### `path:quad_to(cx, cy, x, y)`
 
-API level: `5+`
+since API level 5
 
 Adds a quadratic Bézier curve from the current position to the specified end point.
 
-##### Arguments
+ARGS
+- `cx` / `cy` (`number` Path-local coordinates) Control point
+- `x` / `y` (`number` Path-local coordinates) End point of the curve
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `cx` / `cy` | `number` | Path-local coordinates | Required | Control point |
-| `x` / `y` | `number` | Path-local coordinates | Required | End point of the curve |
-
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
 Adds a quadratic Bézier command to the target path.
 
-##### Constraints and Errors
+ERRORS
 
 Coordinates must be finite numbers.
 
 #### `path:cubic_to(cx1, cy1, cx2, cy2, x, y)`
 
-API level: `5+`
+since API level 5
 
 Adds a cubic Bézier curve from the current position to the specified end point.
 
-##### Arguments
+ARGS
+- `cx1` / `cy1` (`number` Path-local coordinates) Control point near the current position
+- `cx2` / `cy2` (`number` Path-local coordinates) Control point near the end point
+- `x` / `y` (`number` Path-local coordinates) End point of the curve
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `cx1` / `cy1` | `number` | Path-local coordinates | Required | Control point near the current position |
-| `cx2` / `cy2` | `number` | Path-local coordinates | Required | Control point near the end point |
-| `x` / `y` | `number` | Path-local coordinates | Required | End point of the curve |
-
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
 Adds a cubic Bézier command to the target path.
 
-##### Constraints and Errors
+ERRORS
 
 Coordinates must be finite numbers.
 
 #### `path:close()`
 
-API level: `5+`
+since API level 5
 
 Closes the current subpath by connecting it to its starting point.
 
-##### Return Value
-
-There is no return value.
+RET none
 
 ##### Changes
 
@@ -4354,44 +3318,28 @@ Adds a close command to the target path.
 
 #### `mt.text.slice(text, startChar, endChar?)`
 
-API level: `1+`
-
 Slices a string at UTF-8 code-point boundaries. Unlike Lua’s standard byte-based `string.sub`, it does not cut through an individual UTF-8 code point. Because it does not operate on grapheme clusters, it can split combining characters or ZWJ-joined emoji in the middle of what appears to be one character.
 `ctx.chars[index].text` is a cluster after shaping and does not use the same index concept as this function.
 
-##### Arguments
+ARGS
+- `text` (`string`) Target string
+- `startChar` (`integer`) Starting code-point index. 1-based and inclusive
+- `endChar` (`integer` default End) Ending code-point index. 1-based and inclusive
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `text` | `string` | — | Required | Target string |
-| `startChar` | `integer` | — | Required | Starting code-point index. 1-based and inclusive |
-| `endChar` | `integer` | — | End | Ending code-point index. 1-based and inclusive |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `string` | — | String sliced to the specified range. An empty string if the range is empty or invalid |
+RET
+- `string` -- String sliced to the specified range. An empty string if the range is empty or invalid
 
 #### `mt.text.classify(text)`
 
-API level: `4+`
+since API level 4
 
 Classifies the first Unicode code point of a text cluster into a character-category name convenient for animation.
 
-##### Arguments
+ARGS
+- `text` (`string`) Text cluster to classify
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `text` | `string` | — | Required | Text cluster to classify |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `string` | — | One of `"kanji"`, `"hiragana"`, `"katakana"`, `"punctuation"`, `"latin"`, `"digit"`, `"space"`, or `"other"` |
-
-##### Example
+RET
+- `string` -- One of `"kanji"`, `"hiragana"`, `"katakana"`, `"punctuation"`, `"latin"`, `"digit"`, `"space"`, or `"other"`
 
 ```lua
 for _, character in ipairs(ctx.chars) do
@@ -4409,49 +3357,35 @@ This is lightweight classification based on the first code point, not language d
 
 #### `mt.timeline.progress(ctx, fallbackDuration?)`
 
-API level: `1+`
-
 Gets the current progress from 0 to 1.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Context
+- `fallbackDuration` (`number` seconds default `4.0`) Virtual clip length used for looping when the timeline is unavailable
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Context |
-| `fallbackDuration` | `number` | seconds | `4.0` | Virtual clip length used for looping when the timeline is unavailable |
+RET
+- `number` 0–1 -- Current progress
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Current progress |
-
-##### Constraints and Errors
+ERRORS
 
 When the timeline is unavailable, specify a positive value for `fallbackDuration`.
 
 #### `mt.timeline.duration(ctx, fallbackDuration?)`
 
-API level: `6+`
+since API level 6
 
 Returns a positive host clip duration in seconds. When the host timeline is
 unavailable, or its duration in seconds is not finite and positive, it returns
 the requested fallback duration.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Context
+- `fallbackDuration` (`number` seconds default `4.0`) Virtual clip length used when the timeline is unavailable
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Context |
-| `fallbackDuration` | `number` | seconds | `4.0` | Virtual clip length used when the timeline is unavailable |
+RET
+- `number` seconds -- Host clip duration or fallback duration
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | seconds | Host clip duration or fallback duration |
-
-##### Constraints and Errors
+ERRORS
 
 An explicit `fallbackDuration` must be a finite positive number. When passed
 a derived context returned by `window_ctx`, this function returns the duration
@@ -4464,24 +3398,14 @@ local clipDuration =
 
 #### `mt.timeline.remaining(ctx, fallbackDuration?)`
 
-API level: `1+`
-
 Returns the actual number of seconds remaining until the end of the clip. This is a basic building block for writing an outro (exit animation) in real time anchored to the endpoint (see the design rules for [`ctx.timeline`](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/02_ctx_reference#section-timeline)).
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Context
+- `fallbackDuration` (`number` seconds default `4.0`) Virtual clip length used for looping when the timeline is unavailable
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Context |
-| `fallbackDuration` | `number` | seconds | `4.0` | Virtual clip length used for looping when the timeline is unavailable |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | seconds | Time remaining until the end of the clip |
-
-##### Example
+RET
+- `number` seconds -- Time remaining until the end of the clip
 
 ```lua
 -- Fade out during the final 0.5 seconds, regardless of clip length
@@ -4490,27 +3414,17 @@ local fade = mt.clamp(mt.timeline.remaining(ctx) / 0.5, 0.0, 1.0)
 
 #### `mt.timeline.intro_outro_seconds(ctx, introSeconds, outroSeconds, fallbackDuration?)`
 
-API level: `1+`
-
 Returns progress for an intro anchored to the beginning of the clip and an outro anchored to the end, at a **fixed speed over the specified real number of seconds**. Changing the clip length does not change the transition speed. Only when the clip is shorter than `introSeconds + outroSeconds` are both intervals compressed proportionally to fit within the clip (automatic fast-forwarding).
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Context
+- `introSeconds` (`number` seconds) Intro length. Negative values are treated as `0`
+- `outroSeconds` (`number` seconds) Outro length. Negative values are treated as `0`
+- `fallbackDuration` (`number` seconds default `4.0`) Virtual clip length used when the timeline is unavailable
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Context |
-| `introSeconds` | `number` | seconds | Required | Intro length. Negative values are treated as `0` |
-| `outroSeconds` | `number` | seconds | Required | Outro length. Negative values are treated as `0` |
-| `fallbackDuration` | `number` | seconds | `4.0` | Virtual clip length used when the timeline is unavailable |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | `introProgress`. Intro progress |
-| `number` | 0–1 | `outroProgress`. Outro progress |
-
-##### Example
+RET (multiple values)
+1. `number` 0–1 -- `introProgress`. Intro progress
+2. `number` 0–1 -- `outroProgress`. Outro progress
 
 ```lua
 local intro, outro = mt.timeline.intro_outro_seconds(ctx, 0.8, 0.5)
@@ -4520,33 +3434,25 @@ character.scale = character.scale * (1.0 - mt.ease.in_cubic(outro))
 
 #### `mt.timeline.window_progress(ctx, start, duration)`
 
-API level: `6+`
+since API level 6
 
 Converts a time window in the supplied context to linear progress from 0 to 1.
 It returns exactly `0.0` before `start` and exactly `1.0` at or after
 `start + duration`. Within the window, it returns `(ctx.time - start) / duration`.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Context from which time is read
+- `start` (`number` seconds) Start time within the context
+- `duration` (`number` seconds) Length of the time window
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Context from which time is read |
-| `start` | `number` | seconds | Required | Start time within the context |
-| `duration` | `number` | seconds | Required | Length of the time window |
+RET
+- `number` 0–1 -- Linear progress through the window, clamped before and after it
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `number` | 0–1 | Linear progress through the window, clamped before and after it |
-
-##### Constraints and Errors
+ERRORS
 
 - `ctx.time` must be a number.
 - `start` must be a finite number.
 - `duration` must be a finite positive number.
-
-##### Example
 
 ```lua
 local appear =
@@ -4564,33 +3470,25 @@ frame must also be localized before passing the context to time-dependent APIs.
 
 #### `mt.timeline.window_ctx(ctx, start, duration)`
 
-API level: `4+`
+since API level 4
 
 Creates a derived ctx for a specified time window from the original ctx. `start` is the starting time in seconds within the original ctx, and `duration` is a positive window length.
 The derived ctx’s `time` is `ctx.time - start` clamped to `0–duration`; `frame`, `timeline.duration_*`, and `timeline.progress` are also converted to the same local time basis.
 All other values, including canvas, Global, chars, and parts, are inherited from the original ctx.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Original context
+- `start` (`number` seconds) Start time within the original context
+- `duration` (`number` seconds) Length of the time window
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Original context |
-| `start` | `number` | seconds | Required | Start time within the original context |
-| `duration` | `number` | seconds | Required | Length of the time window |
+RET
+- `table` -- Derived context whose time-related values are remapped to the specified window
 
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| `table` | — | Derived context whose time-related values are remapped to the specified window |
-
-##### Constraints and Errors
+ERRORS
 
 - `ctx.time` must be a number.
 - `start` must be a finite number.
 - `duration` must be a finite positive number.
-
-##### Example
 
 ```lua
 local characterCtx =
@@ -4606,29 +3504,21 @@ This API does not copy the original ctx or shared characters and parts. It is a 
 
 #### `mt.timeline.chain(ctx, initialValue, segments, options?)`
 
-API level: `4+`
+since API level 4
 
 Evaluates pure functions for time intervals in sequence and passes the final return value of each completed interval to the next interval.
 An `evaluate` before the current time is evaluated with that interval’s end context, while only the current interval is evaluated with its interval-local `ctx`.
 The return value may be any Lua value, including a number, color, or table combining coordinates and transforms.
 
-##### Arguments
+ARGS
+- `ctx` (`table`) Original context
+- `initialValue` (Any) Initial value passed to the first interval
+- `segments` (`table`) Array of animation or hold intervals
+- `options` (`table` default `nil`) Settings used when the timeline is unavailable
+- `options.fallback_duration` (`number` seconds default `4.0`) Virtual clip length
 
-| Argument | Type | Unit | Default | Description |
-|---|---|---|---|---|
-| `ctx` | `table` | — | Required | Original context |
-| `initialValue` | Any | — | Required | Initial value passed to the first interval |
-| `segments` | `table` | — | Required | Array of animation or hold intervals |
-| `options` | `table` | — | `nil` | Settings used when the timeline is unavailable |
-| `options.fallback_duration` | `number` | seconds | `4.0` | Virtual clip length |
-
-##### Return Value
-
-| Type | Unit | Description |
-|---|---|---|
-| Any | — | Value of the last interval evaluated through the current time |
-
-##### Example
+RET
+- Any -- Value of the last interval evaluated through the current time
 
 ```lua
 local result = mt.timeline.chain(ctx, initialValue, {
@@ -4653,25 +3543,21 @@ local result = mt.timeline.chain(ctx, initialValue, {
 `segmentCtx` inherits canvas, Global, chars, parts, and other values from the caller’s `ctx`, replacing only time-related values with those of the current interval.
 It can be passed like a normal `ctx` to existing Level 3 APIs that read `ctx`, such as `mt.timeline.progress`.
 
-| Field | Type | Unit | Description |
-|---|---|---|---|
-| `segmentCtx.time` | `number` | seconds | Time since the interval began |
-| `segmentCtx.frame` | `number` | frame | Number of frames since the interval began |
-| `segmentCtx.fps` | `number` | fps | Same frame rate as the caller |
-| `segmentCtx.timeline.duration_seconds` | `number` | seconds | Logical duration of the interval |
-| `segmentCtx.timeline.duration_frames` | `number` | frame | Logical duration of the interval converted to frames |
-| `segmentCtx.timeline.progress` | `number` | 0–1 | Progress within the interval |
+- `segmentCtx.time` : `number` : seconds : Time since the interval began
+- `segmentCtx.frame` : `number` : frame : Number of frames since the interval began
+- `segmentCtx.fps` : `number` : fps : Same frame rate as the caller
+- `segmentCtx.timeline.duration_seconds` : `number` : seconds : Logical duration of the interval
+- `segmentCtx.timeline.duration_frames` : `number` : frame : Logical duration of the interval converted to frames
+- `segmentCtx.timeline.progress` : `number` : 0–1 : Progress within the interval
 
 ##### Interval Forms
 
 Each interval uses one of the following forms.
 
-| Interval | Specification | Behavior |
-|---|---|---|
-| Fixed-length animation | `{ duration = seconds, evaluate = function }` | Uses the return value of `evaluate(segmentCtx, previousValue)` |
-| Fixed-length hold | `{ hold = seconds }` | Retains the preceding value without calling a function |
-| Variable-length animation | `{ duration = "remaining", evaluate = function }` | Uses the remaining clip duration after fixed intervals are excluded |
-| Variable-length hold | `{ hold = "remaining" }` | Retains the preceding value for the remaining clip duration |
+- Fixed-length animation : `{ duration = seconds, evaluate = function }` : Uses the return value of `evaluate(segmentCtx, previousValue)`
+- Fixed-length hold : `{ hold = seconds }` : Retains the preceding value without calling a function
+- Variable-length animation : `{ duration = "remaining", evaluate = function }` : Uses the remaining clip duration after fixed intervals are excluded
+- Variable-length hold : `{ hold = "remaining" }` : Retains the preceding value for the remaining clip duration
 
 `"remaining"` can be specified for only one interval within a chain. If a fixed-length outro follows it, only the variable interval absorbs changes in clip length, while the outro always completes at the end of the clip.
 
@@ -4690,7 +3576,7 @@ If the total length of fixed intervals exceeds the clip length, all fixed interv
 Because `segmentCtx.time` and `segmentCtx.timeline` are remapped to the declared duration, every animation reaches its ending state even in a short clip.
 When the timeline is unavailable, `options.fallback_duration` (default `4.0` seconds) is used as a virtual looping clip length.
 
-##### Constraints and Errors
+ERRORS
 
 - `ctx.time` must be a number, and `segments` and `options` must be tables.
 - Each interval must specify exactly one of `duration` or `hold`.
