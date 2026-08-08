@@ -62,22 +62,16 @@ character.offset_y = 0.5 + 0.1   -- RIGHT: 10% of canvas height upward
 Only `global.position_*`, `camera.target_*` and the `geometry.*` canvas
 coordinates are absolute positions where `0.5` is the canvas center.
 
-**3. Y is up, but rotation is clockwise-positive.** The two conventions disagree
-on purpose: positions follow math (Y up), angles follow screen intuition.
+**3. Y is up, but rotation is clockwise-positive.** Positions follow math (Y up)
+while angles follow screen intuition, so the two disagree.
 
 - `offset_y`, `position_y` larger → moves **up**
 - `rotation`, `gradient.angle`, `shadow.angle` positive → rotates **clockwise**
-- `rotation = 90` turns what pointed **up** so it points **right** (12 o'clock →
-  3 o'clock). Under the Y-up mathematical convention the same value would turn it
-  **left**, so an angle derived that way needs its sign flipped
-- `shadow.angle = 90` points **straight down**, not up
+- `rotation = 90` sends **up → right**; `shadow.angle = 90` points **down**
 - `z` positive → **away** from the camera (deeper)
 
-Check a rotation sign against the clock face, not against the Y axis. A shape
-hanging **down** (6 o'clock) swings **left** under a positive `rotation`, because
-6 o'clock advances toward 7 and 8 — the direction that reads as leftward on
-screen. Positions and rotations disagreeing here is the single most common sign
-error in scripts.
+Y-up would normally imply counterclockwise-positive; here it does not. Negate any
+angle derived from the Y axis or from the standard math convention.
 
 To turn an angle into an offset vector, use `mt.polar_offset_2d`, which converts
 between the two conventions for you:
@@ -449,7 +443,7 @@ end
 
 Leading Lua comments configure the simulator. They are not part of the runtime
 API. `@MugTypography` must appear within the first 5 lines for the script to be
-recognised (`@mt` / `@mug` also work).
+recognised.
 
 ```lua
 -- @MugTypography
@@ -459,10 +453,18 @@ recognised (`@mt` / `@mug` also work).
 -- @author Mug
 -- @version 1.0
 -- @api_level 6
+--[[ @description
+What the effect does, in a sentence or two.
+]]
 ```
 
 New scripts should declare the current target API level so unsupported plugin
 versions reject them instead of failing at runtime.
+
+`@description` is the one directive written as a block comment, because its body
+runs to several lines; the text between `--[[ @description` and `]]` is the whole
+value. It must come **last**: the header ends at the first `--[[`, so any
+directive placed after the description is never read.
 
 `@recommend` sets initial Inspector values. Use it **only** when the effect needs
 specific conditions; do not pin text, position or background otherwise, because
@@ -471,10 +473,16 @@ preset.
 
 | Directive | Meaning |
 |---|---|
-| `@recommend bg <spec>` | `#RRGGBB` / `#RRGGBBAA`, or `checkerboard` / `checker`. Both may appear on one line |
+| `@recommend bg <spec>` | A colour, or `checkerboard` / `solid`. Both may appear on one line: `bg checkerboard #ffffff` |
+| `@recommend fill <#hex>` | Global fill colour |
+| `@recommend gradient <#hex>` | Global gradient **end** colour; the fill colour is the other end |
 | `@recommend pos <X> <Y>` | Global position; larger X is right, larger Y is up. Center is `0.5 0.5` |
 | `@recommend text "<string>"` | Quoted; `\n` is a newline |
 | `@recommend lang <code>` | Picks a font for that language, e.g. `ja`. Inferred from `text` when omitted |
+
+Colours are `#RRGGBB` or `#RRGGBBAA`. Write every key and value exactly as
+spelled above. Other spellings are accepted, but they buy nothing and a header
+is easier to read when there is only one way to write it.
 
 ## 10. Recipes for common problems
 
@@ -541,6 +549,28 @@ function OnLayout(ctx)
     end
 end
 ```
+
+**"Needs API N (this build: M)" in the plugin.** The script declares a level the
+installed plugin does not implement, so it never runs. This is not a bug in the
+script, and it cannot be fixed by editing the code you can see: the plugin is
+older than the reference you are working from. Do not lower the `@api_level`
+header to silence it — that only removes the guard, and the script will fail at
+runtime on whichever newer API it actually uses.
+
+Two ways out, and the user picks:
+
+- Update the plugin to the version this reference targets (see the level at the
+  top of this document). Best when nothing ties them to the older build.
+- Rewrite against the older plugin. To do this you need **that** plugin's
+  reference, which ships inside its download — ask the user to attach the
+  `lua_api_for_ai.md` bundled with the installed version. Rewriting from this
+  document instead will reintroduce APIs level M does not have, since a document
+  cannot tell you which of its entries a *later* version added.
+
+The reference the online simulator serves is always the current one, so a user
+on an older plugin who copies a script out of it will hit exactly this. Check
+the level at the top of this document against the `this build:` number the user
+reports before assuming they match.
 
 ## 11. Checklist before returning a script
 
@@ -619,7 +649,7 @@ ctx.chars : MtCharacter[] [R:layout,path read-only]
 ctx.parts : MtPart[] [R:layout,path read-only]
     Resolved parts, indexed from 1.
 ctx.paths : MtPathCollection [R:path read-only]
-    Lazy selector for normalized drawing paths available in OnPath. (since API level 5)
+    Lazy selector for normalized drawing paths available in OnPath.
 ctx.bounding_box : MtBoundingBox [R:layout,path read-only]
     Writable bounding-box drawing parameters.
 ctx.output : MtOutput [R:layout,path read-only]
@@ -1035,10 +1065,10 @@ ctx.chars[i].geometry.canvas_origin_y : number [R:layout,path read-only]
     Character placement origin Y in normalized canvas coordinates.
 ctx.chars[i].geometry.vertical_origin_x : number [R:layout,path read-only]
     unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Vertical-typesetting origin X (column axis) in normalized canvas coordinates. (since API level 2)
+    Vertical-typesetting origin X (column axis) in normalized canvas coordinates.
 ctx.chars[i].geometry.vertical_origin_y : number [R:layout,path read-only]
     unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Vertical-typesetting origin Y (cell top) in normalized canvas coordinates. (since API level 2)
+    Vertical-typesetting origin Y (cell top) in normalized canvas coordinates.
 ctx.chars[i].geometry.bounds_center_x : number [R:layout,path read-only]
     unit=canvas_ratio_position  base=canvas width (0.5 = center)
     Base ink-bounds center X in normalized canvas coordinates.
@@ -1175,17 +1205,17 @@ ctx.output.manual_order_text : string [R:layout,path W:layout]
 
 ```text
 part.index : integer [R:path read-only]
-    One-based global part index. (since API level 5)
+    One-based global part index.
 part.character_index : integer [R:path read-only]
-    One-based index of the owning character. (since API level 5)
+    One-based index of the owning character.
 part.index_in_character : integer [R:path read-only]
-    One-based part index within the owning character. (since API level 5)
+    One-based part index within the owning character.
 part.line_index : integer [R:path read-only]
-    One-based source layout line index. (since API level 5)
+    One-based source layout line index.
 part.text : string [R:path read-only]
-    Text represented by the owning shaped character cluster. (since API level 5)
+    Text represented by the owning shaped character cluster.
 part.path : MtDrawingPath [R:path read-only]
-    Mutable path initialized from the original glyph part and committed atomically after OnPath succeeds. (since API level 5)
+    Mutable path initialized from the original glyph part and committed atomically after OnPath succeeds.
 ```
 
 ### each_info
@@ -1193,21 +1223,21 @@ part.path : MtDrawingPath [R:path read-only]
 ```text
 each_info.progress : number [R:layout,path read-only]
     unit=unit_interval
-    Normalized position within the filtered set, following the order option. (since API level 6)
+    Normalized position within the filtered set, following the order option.
 each_info.n : integer [R:layout,path read-only]
-    One-based counter within the filtered set. Differs from the yielded index whenever a filter is active. (since API level 6)
+    One-based counter within the filtered set. Differs from the yielded index whenever a filter is active.
 each_info.count : integer [R:layout,path read-only]
-    Number of elements in the filtered set (at least 1). (since API level 6)
+    Number of elements in the filtered set (at least 1).
 each_info.first : boolean [R:layout,path read-only]
-    True on the first iteration of the filtered set. (since API level 6)
+    True on the first iteration of the filtered set.
 each_info.last : boolean [R:layout,path read-only]
-    True on the last iteration of the filtered set. (since API level 6)
+    True on the last iteration of the filtered set.
 each_info.char : MtCharacter [R:layout,path read-only]
-    mt.each_part only: the character owning this part. (since API level 6)
+    mt.each_part only: the character owning this part.
 each_info.char_index : integer [R:layout,path read-only]
-    mt.each_part only: one-based index of the owning character in ctx.chars. (since API level 6)
+    mt.each_part only: one-based index of the owning character in ctx.chars.
 each_info.index_in_char : integer [R:layout,path read-only]
-    mt.each_part only: one-based part index within the owning character. (since API level 6)
+    mt.each_part only: one-based part index within the owning character.
 ```
 
 ### ctx.paths
@@ -1215,34 +1245,34 @@ each_info.index_in_char : integer [R:layout,path read-only]
 ```text
 ctx.paths.units_per_em : number [R:path read-only]
     unit=path_units  base=em (always 1000)
-    Normalized path coordinate scale. Always 1000 units per em. (since API level 5)
+    Normalized path coordinate scale. Always 1000 units per em.
 ctx.paths:part(index) -> MtPathPart|nil [R:path read-only]
-    Lazily get one part by its one-based global part index, or nil when absent. (since API level 5)
+    Lazily get one part by its one-based global part index, or nil when absent.
 ctx.paths:character(index) -> MtPathPart[] [R:path read-only]
-    Lazily get every part owned by one one-based character index. (since API level 5)
+    Lazily get every part owned by one one-based character index.
 ctx.paths:select(selector) -> MtPathPart[] [R:path read-only]
-    Lazily select parts with the character/part selector grammar, ordered by global part index. (since API level 5)
+    Lazily select parts with the character/part selector grammar, ordered by global part index.
 ```
 
 ### MtDrawingPath
 
 ```text
 MtDrawingPath:clear() -> nil [R:path read-only]
-    Remove every command from this path. (since API level 5)
+    Remove every command from this path.
 MtDrawingPath:assign(template) -> nil [R:path read-only]
-    Replace this path with a compiled mt.svg_path template. (since API level 5)
+    Replace this path with a compiled mt.svg_path template.
 MtDrawingPath:set_svg(source) -> nil [R:path read-only]
-    Parse and replace this path from SVG path data in normalized 1000-units-per-em coordinates. (since API level 5)
+    Parse and replace this path from SVG path data in normalized 1000-units-per-em coordinates.
 MtDrawingPath:move_to(x, y) -> nil [R:path read-only]
-    Start a subpath at an absolute normalized local coordinate. (since API level 5)
+    Start a subpath at an absolute normalized local coordinate.
 MtDrawingPath:line_to(x, y) -> nil [R:path read-only]
-    Append a straight line to an absolute normalized local coordinate. (since API level 5)
+    Append a straight line to an absolute normalized local coordinate.
 MtDrawingPath:quad_to(cx, cy, x, y) -> nil [R:path read-only]
-    Append a quadratic Bezier segment. (since API level 5)
+    Append a quadratic Bezier segment.
 MtDrawingPath:cubic_to(cx1, cy1, cx2, cy2, x, y) -> nil [R:path read-only]
-    Append a cubic Bezier segment. (since API level 5)
+    Append a cubic Bezier segment.
 MtDrawingPath:close() -> nil [R:path read-only]
-    Close the current subpath. (since API level 5)
+    Close the current subpath.
 ```
 
 ### color value
@@ -1280,7 +1310,7 @@ mt.layout : MtLayoutUtilities
 mt.path : MtPathUtilities
     Closed-form motion path evaluation namespace.
 mt.svg_path(source, optionsOrSourceUnitsPerEm?) -> MtDrawingPath
-    Compile SVG path data into an immutable normalized template. Accepts source units per em, or { view_box, em_scale } where em_scale 1.0 fits the view box to one em. (since API level 5)
+    Compile SVG path data into an immutable normalized template. Accepts source units per em, or { view_box, em_scale } where em_scale 1.0 fits the view box to one em.
 mt.timeline : MtTimelineUtilities
     Timeline progress and interpolation namespace.
 mt.text : MtTextUtilities
@@ -1302,15 +1332,15 @@ mt.lerp_angle(from, to, t) -> number
 mt.distribute(index, count) -> number
     Map a one-based index evenly across 0 through 1.
 mt.each_char(ctx, options?) -> function
-    Iterate shaped characters with optional filtering. Yields the ctx.chars index, the character, and a reusable info table with progress, n, count, first and last. Options: from, to (index range), line (line_index filter), order ('asc'|'desc'|'center'|'random') selecting how info.progress spans 0 through 1, seed for the random order. info is reused every iteration: copy values out to keep them. (since API level 6)
+    Iterate shaped characters with optional filtering. Yields the ctx.chars index, the character, and a reusable info table with progress, n, count, first and last. Options: from, to (index range), line (line_index filter), order ('asc'|'desc'|'center'|'random') selecting how info.progress spans 0 through 1, seed for the random order. info is reused every iteration: copy values out to keep them.
 mt.each_part(ctx, options?) -> function
-    Iterate shaped parts with optional filtering. Yields the ctx.parts index, the part, and a reusable info table that also resolves char, char_index and index_in_char. Adds from_char and to_char, keeping only parts whose owning character index falls in that range; they intersect with from and to. info.progress spans the whole filtered set and does not restart on character boundaries. (since API level 6)
+    Iterate shaped parts with optional filtering. Yields the ctx.parts index, the part, and a reusable info table that also resolves char, char_index and index_in_char. Adds from_char and to_char, keeping only parts whose owning character index falls in that range; they intersect with from and to. info.progress spans the whole filtered set and does not restart on character boundaries.
 mt.falloff(distance, radius) -> number
-    Smooth bell-shaped influence weight: 1 at the centre, easing toward 0 with distance. (since API level 3)
+    Smooth bell-shaped influence weight: 1 at the centre, easing toward 0 with distance.
 mt.polar_offset(angleDegrees, radius) -> number, number
-    Deprecated screen-oriented polar vector, whose Y must be negated before it reaches offset_y; use polar_offset_2d. DEPRECATED. (since API level 3)
+    Deprecated screen-oriented polar vector, whose Y must be negated before it reaches offset_y; use polar_offset_2d. DEPRECATED.
 mt.polar_offset_2d(angleDegrees, radius) -> number, number
-    Converts a polar direction (degrees) and radius into a Y-up canvas offset pair, ready to add to offset_x and offset_y. (since API level 5)
+    Converts a polar direction (degrees) and radius into a Y-up canvas offset pair, ready to add to offset_x and offset_y.
 mt.smoothstep(edge0, edge1, value) -> number
     Smooth Hermite transition across a range.
 mt.cycle(t, period) -> number
@@ -1320,7 +1350,7 @@ mt.pingpong(t, period) -> number
 mt.stagger(time, index, delay, duration) -> number
     Per-index staggered progress in the range 0 to 1.
 mt.stagger_progress(progress, position, span) -> number
-    Spread an existing normalized progress across element positions while ensuring every element finishes at progress 1. (since API level 6)
+    Spread an existing normalized progress across element positions while ensuring every element finishes at progress 1.
 mt.keyframes(keys, time) -> number|color
     Closed-form piecewise keyframe interpolation over number or color keys with optional per-segment easing.
 mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?) -> number
@@ -1346,26 +1376,26 @@ mt.wave_sawtooth(t, frequency, phase?) -> number
 mt.wiggle(time, frequency, amplitude, octaves?, seed?) -> number
     Deterministic layered value-noise wiggle; amplitude is the first octave's amplitude, not the summed maximum.
 mt.bounce_y(paramsOrT, groundY, startY, gravity, restitution, startVelocity, squashStrength, stretchStrength, flexibility, damping) -> table|number
-    Closed-form 1D ballistic bounce calculation against a ground plane with continuous Squash & Stretch. (since API level 3)
+    Closed-form 1D ballistic bounce calculation against a ground plane with continuous Squash & Stretch.
 mt.bounce_x(paramsOrT, wallX, startX, acceleration, restitution, startVelocity, squashStrength, stretchStrength, flexibility, damping) -> table|number
-    Closed-form 1D ballistic bounce calculation against a vertical wall plane with continuous Squash & Stretch. (since API level 3)
+    Closed-form 1D ballistic bounce calculation against a vertical wall plane with continuous Squash & Stretch.
 mt.bounce_ground(ctx, item, groundY, config?) -> table
-    Convenience API: Bounces a character or part item against a ground Canvas plane, automatically computing and applying offset_y, stretch_x, and stretch_y. (since API level 3)
+    Convenience API: Bounces a character or part item against a ground Canvas plane, automatically computing and applying offset_y, stretch_x, and stretch_y.
 mt.bounce_wall(ctx, item, wallX, config?) -> table
-    Convenience API: Bounces a character or part item against a vertical wall Canvas plane, automatically computing and applying offset_x, stretch_x, and stretch_y. (since API level 3)
+    Convenience API: Bounces a character or part item against a vertical wall Canvas plane, automatically computing and applying offset_x, stretch_x, and stretch_y.
 mt.impact_squash(params) -> number, number, number
-    Closed-form squash-and-stretch impulse for collision events. (since API level 3)
+    Closed-form squash-and-stretch impulse for collision events.
 mt.projectile_2d(paramsOrT, speed, angleDegrees, gravity, spin, drag) -> table|number
-    Closed-form 2D ballistic flight from a launch velocity under gravity, with optional spin and drag. (since API level 3)
+    Closed-form 2D ballistic flight from a launch velocity under gravity, with optional spin and drag.
 mt.friction_decay(t, speed, friction) -> number, number
-    Closed-form exponential deceleration: distance travelled and remaining speed under friction. (since API level 3)
+    Closed-form exponential deceleration: distance travelled and remaining speed under friction.
 ```
 
 ### mt.color.*
 
 ```text
 mt.color.resolve_fill(ctx, target) -> MtColor, string, number
-    Resolve the fill color, mode and object opacity inherited by a character or part. (since API level 6)
+    Resolve the fill color, mode and object opacity inherited by a character or part.
 mt.color.lerp(from, to, t) -> MtColor
     Interpolate two RGBA color tables.
 mt.color.from_hsv(hue, saturation, value, alpha?) -> MtColor
@@ -1443,23 +1473,23 @@ mt.ease.cubic_bezier(x1, y1, x2, y2, t) -> number
 
 ```text
 mt.layout.reflow(ctx, gap?, config?) -> void
-    Reflows characters from exact horizontal or vertical typesetting origins while preserving shaped spacing and applying current scale/stretch; skipped targets contribute advances without being moved. (since API level 2)
+    Reflows characters from exact horizontal or vertical typesetting origins while preserving shaped spacing and applying current scale/stretch; skipped targets contribute advances without being moved.
 mt.layout.place_2d(ctx, item, canvasX, canvasY) -> number, number
-    Places a character or part anchor at an exact pre-3D canvas point through the complete global/character/part 2D hierarchy. (since API level 2)
+    Places a character or part anchor at an exact pre-3D canvas point through the complete global/character/part 2D hierarchy.
 mt.layout.get_canvas_position_2d(ctx, item) -> number, number
-    Calculates the exact current pre-3D canvas position (canvasX, canvasY) of a character or part anchor. (since API level 3)
+    Calculates the exact current pre-3D canvas position (canvasX, canvasY) of a character or part anchor.
 mt.layout.radial_distance(ctx, canvasX, canvasY, centerX?, centerY?) -> number
-    Aspect-corrected distance from a canvas point to the centre of a radial effect. (since API level 3)
+    Aspect-corrected distance from a canvas point to the centre of a radial effect.
 mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY) -> number, number
-    Calculates the relative offset_x and offset_y required to place a character or part anchor at an exact pre-3D canvas position (canvasX, canvasY) without mutating item properties. (since API level 3)
+    Calculates the relative offset_x and offset_y required to place a character or part anchor at an exact pre-3D canvas position (canvasX, canvasY) without mutating item properties.
 mt.layout.measure_bounds_2d(ctx, targets?, targetType?) -> table|nil
-    Returns axis-aligned bounds of transformed natural part boxes after the complete 2D hierarchy and before 3D, projection, and deformation. Omit targets to measure every character or part. (since API level 2)
+    Returns axis-aligned bounds of transformed natural part boxes after the complete 2D hierarchy and before 3D, projection, and deformation. Omit targets to measure every character or part.
 mt.layout.queue_on_path(ctx, path, options?) -> number[]
-    Distributes characters or parts along an arc-length path in reading order, spaced by their own natural advances, and returns the normalized distance ratio each item occupies. (since API level 3)
+    Distributes characters or parts along an arc-length path in reading order, spaced by their own natural advances, and returns the normalized distance ratio each item occupies.
 mt.layout.group_by_line(ctx) -> MtLayoutLineGroup[]
-    Groups shaped characters by line_index in reading order; vertical-writing lines represent columns. (since API level 4)
+    Groups shaped characters by line_index in reading order; vertical-writing lines represent columns.
 mt.layout.pivot_at_2d(ctx, item, anchor) -> void
-    Sets a semantic 2D bounds or writing-origin pivot on a character or part while preserving its current pre-3D pose. (since API level 4)
+    Sets a semantic 2D bounds or writing-origin pivot on a character or part while preserving its current pre-3D pose.
 mt.layout.retypeset(ctx, gap?, config?) -> void
     Deprecated approximate re-typesetting; use reflow. DEPRECATED.
 mt.layout.canvas_to_offset(resolvedGlobal, canvasWidth, canvasHeight, naturalCenterX, naturalCenterY, canvasX, canvasY) -> number, number
@@ -1478,16 +1508,16 @@ mt.path.bezier(p0, p1, p2, p3, t) -> number, number, number, number
 mt.path.catmull_rom(points, t) -> number, number, number, number
     Evaluates a point and its tangent (raw derivative, not normalized) on a Catmull-Rom spline through an array of points; t is normalized over the whole path (0 at the first point, 1 at the last).
 mt.path.arc_length(points, aspectRatio?, options?) -> MtArcLengthPath
-    Builds an arc-length parameterized path from control points so items can be placed by distance instead of by curve parameter t. Returns an MtArcLengthPath exposing length() and at_distance(distanceRatio). (since API level 3)
+    Builds an arc-length parameterized path from control points so items can be placed by distance instead of by curve parameter t. Returns an MtArcLengthPath exposing length() and at_distance(distanceRatio).
 ```
 
 ### path:*
 
 ```text
 path:length() -> number
-    Total path length in aspect-corrected canvas units. Called with a colon, as path:length(). (since API level 3)
+    Total path length in aspect-corrected canvas units. Called with a colon, as path:length().
 path:at_distance(distanceRatio) -> number, number, number
-    Position and heading at a normalized distance along the path, where 0 is the start and 1 is the end, measured by distance rather than by curve parameter. Returns x, y, and a heading in degrees already converted to the screen convention. Called with a colon, as path:at_distance(ratio). (since API level 3)
+    Position and heading at a normalized distance along the path, where 0 is the start and 1 is the end, measured by distance rather than by curve parameter. Returns x, y, and a heading in degrees already converted to the screen convention. Called with a colon, as path:at_distance(ratio).
 ```
 
 ### mt.timeline.*
@@ -1496,17 +1526,17 @@ path:at_distance(distanceRatio) -> number, number, number
 mt.timeline.progress(ctx, fallbackDuration?) -> number
     Returns the host timeline progress, falling back to a looping progress if unavailable.
 mt.timeline.duration(ctx, fallbackDuration?) -> number
-    Returns a finite positive host clip duration, or a fallback when no usable host duration is available. (since API level 6)
+    Returns a finite positive host clip duration, or a fallback when no usable host duration is available.
 mt.timeline.remaining(ctx, fallbackDuration?) -> number
     Remaining seconds until the clip end, using a looping fallback duration when the host timeline is unavailable.
 mt.timeline.intro_outro_seconds(ctx, introSeconds, outroSeconds, fallbackDuration?) -> number, number
     Real-time intro and outro progress anchored to the clip head and tail, compressed proportionally when the clip is shorter than the requested seconds.
 mt.timeline.window_progress(ctx, start, duration) -> number
-    Returns linear progress through a context-local time window, clamped to 0 before the window and 1 after it. (since API level 6)
+    Returns linear progress through a context-local time window, clamped to 0 before the window and 1 after it.
 mt.timeline.chain(ctx, initialValue, segments, options?) -> any
-    Evaluates duration-based pure-function segments with a segment-local context, passing each completed segment's final return value to the next and supporting fixed or remaining-span holds. (since API level 4)
+    Evaluates duration-based pure-function segments with a segment-local context, passing each completed segment's final return value to the next and supporting fixed or remaining-span holds.
 mt.timeline.window_ctx(ctx, start, duration) -> table
-    Creates a derived context whose time, frame, duration, and progress are remapped to a clamped local time window. (since API level 4)
+    Creates a derived context whose time, frame, duration, and progress are remapped to a clamped local time window.
 mt.timeline.intro_outro(progress, introFraction, outroFraction) -> number, number
     Deprecated: fraction-based transitions stretch with the clip length; use intro_outro_seconds. DEPRECATED.
 ```
@@ -1517,7 +1547,7 @@ mt.timeline.intro_outro(progress, introFraction, outroFraction) -> number, numbe
 mt.text.slice(text, startChar, endChar?) -> string
     Slice a UTF-8 string by code-point indices; this is not grapheme-cluster aware.
 mt.text.classify(text) -> string
-    Classifies the first Unicode code point of a text cluster as Japanese script, punctuation, Latin, digit, space, or other. (since API level 4)
+    Classifies the first Unicode code point of a text cluster as Japanese script, punctuation, Latin, digit, space, or other.
 ```
 
 ## 14. mt.* full reference
@@ -1724,8 +1754,6 @@ character.fill.color = mt.color.from_hsv(hue, 0.8, 1.0)
 
 #### `mt.each_char(ctx, options?)`
 
-since API level 6
-
 Returns an iterator over shaped characters with optional filtering. `index` always addresses `ctx.chars`, so it can be passed straight to `ctx.chars[index]` or to the `mt.layout.*` helpers. The counter within the filtered subset is `info.n`.
 
 ARGS
@@ -1767,8 +1795,6 @@ end
 ```
 
 #### `mt.each_part(ctx, options?)`
-
-since API level 6
 
 Returns an iterator over shaped parts with optional filtering. It follows the same rules as `mt.each_char`, and additionally resolves the owning character on `info` and can filter by it.
 
@@ -1829,8 +1855,6 @@ end
 ```
 
 #### `mt.stagger_progress(progress, position, span)`
-
-since API level 6
 
 Adds a position-dependent start delay to an existing 0–1 normalized progress for synchronized group cascade within a shared window.
 The element at `position = 0` starts with the shared progress, while the element
@@ -1905,8 +1929,6 @@ ERRORS
 ### 4. Distance-Based Influence
 
 #### `mt.falloff(distance, radius)`
-
-since API level 3
 
 Returns an influence weight that is strongest at the center and decreases smoothly with distance (wavefront, passing shine, ripple, shockwave, localized emphasis). The return value is 0–1.
 
@@ -2120,8 +2142,6 @@ character.offset_y = 0.5 + settle * 0.1
 
 #### `mt.polar_offset_2d(angleDegrees, radius)`
 
-since API level 5
-
 Converts a polar direction (degrees) and radius into a Y-up canvas offset pair (radial scatter, orbital motion, circular explosion). It lets you express motion such as scattering, gathering, and orbiting without writing `cos` / `sin`.
 
 ARGS
@@ -2144,8 +2164,6 @@ character.offset_y = 0.5 + dy
 ### 8. Physical Motion
 
 #### `mt.bounce_y(config)` / `mt.bounce_x(config)`
-
-since API level 3
 
 Calculates and returns the position, velocity, Squash & Stretch, and contact-position correction for a one-dimensional ballistic bounce against a floor (Y axis) or wall (X axis). It does not modify characters or parts directly. Both a configuration-table form and a positional-argument form are supported.
 
@@ -2241,8 +2259,6 @@ char.stretch_y = b.stretch_y
 
 #### `mt.bounce_ground(ctx, item, groundY, config?)`
 
-since API level 3
-
 A simple convenience function that drops a character or part `item` toward the specified ground Canvas coordinate `groundY` (for example, `0.1`), then makes it bounce and land with a springy motion. `offset_y`, `stretch_x`, and `stretch_y` are applied automatically.
 
 ARGS
@@ -2298,8 +2314,6 @@ mt.bounce_ground(ctx, ctx.chars[i], 0.1, {
 
 #### `mt.bounce_wall(ctx, item, wallX, config?)`
 
-since API level 3
-
 A simple convenience function that makes a character or part `item` collide with and bounce off the specified wall Canvas coordinate `wallX` (for example, `0.9`). `offset_x`, `stretch_x`, and `stretch_y` are applied automatically.
 
 ARGS
@@ -2343,8 +2357,6 @@ mt.bounce_wall(ctx, ctx.parts[i], 0.9, { start_mode = "relative", travel_distanc
 ```
 
 #### `mt.impact_squash(config)`
-
-since API level 3
 
 Calculates a **Squash & Stretch impulse that compresses and rebounds at the instant of impact**. It uses the damped oscillation `sin(ωt) * exp(-γt)`, compressing most strongly immediately after impact and returning to the original shape while oscillating.
 
@@ -2390,8 +2402,6 @@ character.offset_y = character.offset_y + correction * character.geometry.bounds
 > ```
 
 #### `mt.projectile_2d(config)` / `mt.projectile_2d(t, speed, angle, gravity?, spin?, drag?)`
-
-since API level 3
 
 Closed-form 2D ballistic flight from launch velocity under gravity (cannon launch, falling debris, ballistic trajectory). While `mt.bounce_y` / `mt.bounce_x` model motion that strikes a surface and bounces, this function is for motion that is thrown and does not land (scattered debris, explosions, and tosses).
 
@@ -2461,8 +2471,6 @@ the trajectory is rarely the cause — something layered on top of it is:
 
 #### `mt.friction_decay(t, speed, friction)`
 
-since API level 3
-
 Calculates exponential friction deceleration from initial velocity (sliding stop, braking inertia). It lets you control motion that “rushes in and glides to a stop” using the physical quantities initial velocity and coefficient of friction, rather than arrival time.
 
 ARGS
@@ -2493,8 +2501,6 @@ See [“color” in Concepts](https://mug-lab-3.github.io/mug-typography-docs/en
 All functions return a new color table and do not modify their arguments.
 
 #### `mt.color.resolve_fill(ctx, target)`
-
-since API level 6
 
 Resolves the fill applied to a character or part and returns its base color,
 fill mode, and object opacity. It is available in `OnLayout` and `OnPath`.
@@ -2658,8 +2664,6 @@ local eased = mt.ease.cubic_bezier(0.42, 0.0, 0.58, 1.0, progress)
 
 #### `mt.layout.reflow(ctx, gap?, config?)`
 
-since API level 2
-
 For horizontal writing, uses `geometry.canvas_origin_*`; for vertical writing, uses `geometry.vertical_origin_*`. It applies the current `scale * stretch` to the advance while preserving spacing derived from shaping, kerning, tracking, and margins based on differences between adjacent natural origins. Per-character rotation and pivot are also included in origin alignment. This function does not equalize the distance between visible ink outlines.
 
 ARGS
@@ -2698,8 +2702,6 @@ mt.layout.reflow(ctx, 0.02, {
 
 #### `mt.layout.group_by_line(ctx)`
 
-since API level 4
-
 Groups shaped characters by `line_index` and returns them in the host’s reading order.
 The groups represent lines in horizontal writing and columns in vertical writing. It does not modify layout or character properties.
 
@@ -2728,8 +2730,6 @@ end
 ### 12. Canvas Position, Distance, and Pivot
 
 #### `mt.layout.place_2d(ctx, item, canvasX, canvasY)`
-
-since API level 2
 
 Precisely places the anchor of a character or part at a canvas normalized position **before 3D, camera, projection, and Deform are applied**. It composes and inverts the `offset` / `pivot` / `rotation` / `scale` / `stretch` of Global, the owning character, and the target itself using the same hierarchy and the same pixel coordinates for a non-square canvas as Native rendering.
 
@@ -2760,8 +2760,6 @@ mt.layout.place_2d(ctx, ctx.parts[1], 0.5, 0.5)
 
 #### `mt.layout.get_canvas_position_2d(ctx, item)`
 
-since API level 3
-
 Gets the current Canvas coordinates `(canvasX, canvasY)` of a character or part anchor before 3D transforms, in the normalized Y-up coordinate system from 0.0 to 1.0. The function automatically determines whether `item` is a character (`ctx.chars[i]`) or a part (`ctx.parts[j]`).
 
 ARGS
@@ -2781,8 +2779,6 @@ local partX, partY = mt.layout.get_canvas_position_2d(ctx, ctx.parts[1])
 ```
 
 #### `mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY)`
-
-since API level 3
 
 Calculates and returns the `offset_x` and `offset_y` required to place a character or part at the specified Canvas coordinates `(canvasX, canvasY)` before 3D transforms, without rewriting the properties themselves. The type is detected automatically from the character or part passed as `item`.
 
@@ -2811,8 +2807,6 @@ local pox, poy = mt.layout.canvas_to_offset_2d(ctx, ctx.parts[1], 0.2, 0.3)
 
 #### `mt.layout.radial_distance(ctx, canvasX, canvasY, centerX?, centerY?)`
 
-since API level 3
-
 Returns the distance from the center of a radial effect to the specified Canvas coordinates. If `centerX` / `centerY` are omitted, the center of the screen `(0.5, 0.5)` is used.
 
 ARGS
@@ -2838,8 +2832,6 @@ end
 ```
 
 #### `mt.layout.pivot_at_2d(ctx, item, anchor)`
-
-since API level 4
 
 Automatically determines whether the target is a character or part and sets its pivot to a semantic 2D position. It corrects `offset_x/y` by the difference between the local 2D matrices before and after the change, so the current pose before 3D application from rotation, scale, and stretch does not move.
 Global is not supported. Preserving the visual result after yaw, pitch, z, camera, or projection is outside its scope.
@@ -2869,8 +2861,6 @@ character.rotation = math.sin(ctx.time * 3.0) * 8.0
 ### 13. Bounds After 2D Transforms
 
 #### `mt.layout.measure_bounds_2d(ctx, targets?, targetType?)`
-
-since API level 2
 
 Transforms the natural bounding rectangles of the specified targets through the complete Global→character→part 2D hierarchy, then returns canvas-axis-aligned bounds enclosing all their vertices. When characters are specified, the natural bounds of their owned parts are combined; characters with no parts use the character’s natural bounds. Call it after writing the target fields.
 
@@ -2917,8 +2907,6 @@ local allPartBounds = mt.layout.measure_bounds_2d(ctx, nil, "part")
 ### 14. Alignment on Paths
 
 #### `mt.layout.queue_on_path(ctx, path, options?)`
-
-since API level 3
 
 Arranges characters (or parts) on a path created by `mt.path.arc_length` **in reading order**, and returns the distance ratio (0–1) occupied by each element.
 
@@ -3067,8 +3055,6 @@ character.offset_y = y
 
 #### `mt.path.arc_length(points, aspectRatio?, options?)`
 
-since API level 3
-
 Constructs an **arc-length-parameterized** path from control points. The two functions above evaluate using curve parameter `t`, but **equal intervals of `t` are not equal distances**. Samples bunch together where the curve bends, so uses that require spacing by distance, such as queues, character advance along a path, or constant-speed motion, require a cumulative-length table. This function constructs that table once and provides distance-based lookup.
 
 Passing `ctx.canvas.aspect_ratio` as `aspectRatio` multiplies X differences by it to equalize the meaning of distance on the horizontal and vertical axes. If omitted, distance is measured directly in normalized units, causing spacing to expand or contract on a non-square canvas.
@@ -3119,8 +3105,6 @@ end
 
 #### `mt.svg_path(source, optionsOrSourceUnitsPerEm?)`
 
-since API level 5
-
 Converts a string in the same format as an SVG `d` attribute into a reusable, read-only path template.
 As a simplified SVG-compatible implementation, it supports absolute and relative `M` / `L` / `H` / `V` / `Q` / `T` / `C` / `S` / `Z` commands and consecutive coordinate sets. Elliptical arcs `A` / `a` are not supported.
 
@@ -3167,8 +3151,6 @@ For a static SVG string, convert it with `mt.svg_path` outside the function and 
 
 #### Drawing Path Editing API
 
-since API level 5
-
 The `path` of a part obtained through `ctx.paths` can be edited with the following methods.
 
 - [`path:clear()`](#api-path-clear) : Delete every command in the path
@@ -3192,8 +3174,6 @@ Parts to which changes are not applied revert to the original glyph outline.
 
 #### `path:clear()`
 
-since API level 5
-
 Deletes all commands in the path.
 
 RET none
@@ -3203,8 +3183,6 @@ RET none
 Empties the target path and resets its coordinate-normalization settings to their initial values.
 
 #### `path:assign(template)`
-
-since API level 5
 
 Replaces the path with the contents of a template created by `mt.svg_path`.
 
@@ -3219,8 +3197,6 @@ Replaces the target’s path data and coordinate-normalization settings with the
 
 #### `path:set_svg(source)`
 
-since API level 5
-
 Parses SVG path data and replaces the target path.
 
 ARGS
@@ -3233,8 +3209,6 @@ RET none
 Replaces the target path with the specified SVG path and resets its coordinate-normalization settings to their initial values.
 
 #### `path:move_to(x, y)`
-
-since API level 5
 
 Adds a new subpath beginning at the specified coordinates.
 
@@ -3253,8 +3227,6 @@ Coordinates must be finite numbers.
 
 #### `path:line_to(x, y)`
 
-since API level 5
-
 Adds a straight line from the current position to the specified coordinates.
 
 ARGS
@@ -3271,8 +3243,6 @@ ERRORS
 Coordinates must be finite numbers.
 
 #### `path:quad_to(cx, cy, x, y)`
-
-since API level 5
 
 Adds a quadratic Bézier curve from the current position to the specified end point.
 
@@ -3292,8 +3262,6 @@ Coordinates must be finite numbers.
 
 #### `path:cubic_to(cx1, cy1, cx2, cy2, x, y)`
 
-since API level 5
-
 Adds a cubic Bézier curve from the current position to the specified end point.
 
 ARGS
@@ -3312,8 +3280,6 @@ ERRORS
 Coordinates must be finite numbers.
 
 #### `path:close()`
-
-since API level 5
 
 Closes the current subpath by connecting it to its starting point.
 
@@ -3339,8 +3305,6 @@ RET
 - `string` -- String sliced to the specified range. An empty string if the range is empty or invalid
 
 #### `mt.text.classify(text)`
-
-since API level 4
 
 Classifies the first Unicode code point of a text cluster into a character-category name convenient for animation.
 
@@ -3380,8 +3344,6 @@ ERRORS
 When the timeline is unavailable, specify a positive value for `fallbackDuration`.
 
 #### `mt.timeline.duration(ctx, fallbackDuration?)`
-
-since API level 6
 
 Returns a positive host clip duration in seconds. When the host timeline is
 unavailable, or its duration in seconds is not finite and positive, it returns
@@ -3443,8 +3405,6 @@ character.scale = character.scale * (1.0 - mt.ease.in_cubic(outro))
 
 #### `mt.timeline.window_progress(ctx, start, duration)`
 
-since API level 6
-
 Converts a time window in the supplied context to linear progress from 0 to 1.
 It returns exactly `0.0` before `start` and exactly `1.0` at or after
 `start + duration`. Within the window, it returns `(ctx.time - start) / duration`.
@@ -3479,8 +3439,6 @@ frame must also be localized before passing the context to time-dependent APIs.
 
 #### `mt.timeline.window_ctx(ctx, start, duration)`
 
-since API level 4
-
 Creates a derived ctx for a specified time window from the original ctx. `start` is the starting time in seconds within the original ctx, and `duration` is a positive window length.
 The derived ctx’s `time` is `ctx.time - start` clamped to `0–duration`; `frame`, `timeline.duration_*`, and `timeline.progress` are also converted to the same local time basis.
 All other values, including canvas, Global, chars, and parts, are inherited from the original ctx.
@@ -3512,8 +3470,6 @@ local opacity = mt.ease.out_cubic(characterCtx.timeline.progress)
 This API does not copy the original ctx or shared characters and parts. It is a shallow derived context that replaces only time-related values.
 
 #### `mt.timeline.chain(ctx, initialValue, segments, options?)`
-
-since API level 4
 
 Evaluates pure functions for time intervals in sequence and passes the final return value of each completed interval to the next interval.
 An `evaluate` before the current time is evaluated with that interval’s end context, while only the current interval is evaluated with its interval-local `ctx`.
