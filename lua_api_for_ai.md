@@ -2,7 +2,7 @@
      Prose sections come from scripting/ai-preamble.md; reference tables come from
      scripting/api-schema.json. Edit those sources instead. -->
 
-Target API level: **6**. Lua 5.4 for the Mug Typography plugin. Complete contract
+Target API level: **7**. Lua 5.4 for the Mug Typography plugin. Complete contract
 for `ctx`: every field, unit, direction, reference point. Read section 1 first —
 most failures are units, direction or reference point, not syntax.
 
@@ -35,18 +35,33 @@ Samples ship in the plugin's distribution ZIP — `samples/reference/` (one
 concept each) and `samples/showcase/` (complete effects). Imitate a nearby
 sample's structure instead of inventing a style.
 
-## 1. The six rules that break most scripts
+## 1. The seven rules that break most scripts
 
-**1. `ctx` is rebuilt from Inspector values every frame. Accumulation does not work.**
+**1. `ctx` is rebuilt from Inspector values every frame. Preserve those values unless a full override is intentional; accumulation does not work.**
 
 ```lua
-ctx.global.rotation = ctx.global.rotation + 1.0   -- WRONG: always Inspector + 1
-ctx.global.rotation = ctx.time * 20.0             -- RIGHT: derived from time
+-- RIGHT: frame-independent animation composed over Inspector settings
+ctx.global.rotation = ctx.global.rotation + ctx.time * 20.0
+character.offset_y = character.offset_y + math.sin(ctx.time) * 0.05
+character.scale = character.scale * (1.0 + math.sin(ctx.time) * 0.1)
+character.opacity = character.opacity * fade
+
+-- WRONG if the intent was cumulative motion: this is always Inspector + 1
+ctx.global.rotation = ctx.global.rotation + 1.0
+
+-- Valid only when deliberately replacing the Inspector rotation
+ctx.global.rotation = ctx.time * 20.0
 ```
 
 Every frame must be computable from its current inputs alone. The host evaluates
 frames out of order (scrubbing, reverse playback, cache, parallel render), so
-never carry state between frames.
+never carry state between frames. For normal animation, add deltas to position,
+offset, pivot, rotation, and depth values; multiply scale, stretch, and opacity by
+animation factors. Direct assignment intentionally discards the corresponding
+Inspector value. When several calculations need the same original value, copy it
+to a local variable before the first write. Style fields such as fill or stroke
+colors may be assigned directly when replacing the Inspector style is the effect's
+explicit design.
 
 **2. Offsets and pivots are displacements with neutral `0.5`, not positions.**
 
@@ -103,6 +118,16 @@ and `OnPath`.
 must not stretch with clip length. Use clip fractions only when intentionally
 proportional to clip length. Requested intro/outro durations are compressed only
 when their sum exceeds the clip duration.
+
+**7. Do not disable 3D projection unless the user explicitly requests a 2D-only script.**
+`ctx.output.force_disable_3d_projection = true` is a final rendering-policy
+override, not a routine optimization. It ignores every Inspector and keyframed
+3D value, including Camera, Global, Character and Part 3D controls. Never infer
+it from currently neutral 3D values or merely from the fact that the generated
+motion uses only 2D fields. Set it when the user explicitly says, for example,
+"make it 2D-only", "limit it to 2D", or when the documented effect contract
+requires 2D output. Otherwise leave it `false` so the user can add 3D motion in
+the Inspector later.
 
 ## 2. Callbacks
 
@@ -738,9 +763,9 @@ ctx.meta.instance_seed : integer [R:init,pre,layout,path read-only]
 
 ```text
 ctx.meta.limits.max_characters : integer [R:init,pre,layout,path read-only]
-    Maximum characters addressable by host parameter groups.
+    Maximum number of characters this instance can lay out and expose to scripts.
 ctx.meta.limits.max_parts : integer [R:init,pre,layout,path read-only]
-    Maximum parts addressable by host parameter groups.
+    Maximum number of parts this instance can lay out and expose to scripts.
 ```
 
 ### ctx.global
@@ -852,6 +877,11 @@ ctx.global.stroke.gap : number [R:pre,layout,path W:pre]
     Resolved global fill-to-stroke gap.
 ctx.global.stroke.color : MtColor [R:pre,layout,path W:pre]
     Resolved global stroke color.
+ctx.global.stroke.outer_width : number [R:pre,layout,path W:pre]
+    unit=em  base=font size (1.0 = 1 em)
+    Outer stroke width; active only while the inner stroke width is positive.
+ctx.global.stroke.outer_color : MtColor [R:pre,layout,path W:pre]
+    Outer stroke color.
 ctx.global.stroke.order : string [R:pre,layout,path W:pre]
     values=fill_over_stroke|stroke_over_fill
     Whether fill or stroke is drawn on top.
@@ -988,6 +1018,11 @@ ctx.chars[i].stroke / ctx.parts[i].stroke.gap : number [R:layout,path W:layout]
     Raw individual fill-to-stroke gap.
 ctx.chars[i].stroke / ctx.parts[i].stroke.color : MtColor [R:layout,path W:layout]
     Raw individual stroke color.
+ctx.chars[i].stroke / ctx.parts[i].stroke.outer_width : number [R:layout,path W:layout]
+    unit=em  base=font size (1.0 = 1 em)
+    Raw individual outer stroke width; active only while the inner stroke width is positive.
+ctx.chars[i].stroke / ctx.parts[i].stroke.outer_color : MtColor [R:layout,path W:layout]
+    Raw individual outer stroke color.
 ```
 
 ### ctx.chars[i].shadow / ctx.parts[i].shadow
@@ -1199,6 +1234,8 @@ ctx.output.manual_order_enabled : boolean [R:layout,path W:layout]
     Whether manual reveal and draw order is enabled.
 ctx.output.manual_order_text : string [R:layout,path W:layout]
     Manual character and part order list.
+ctx.output.force_disable_3d_projection : boolean [R:layout,path W:layout]
+    Final per-frame override that disables 3D projection and ignores all Inspector and keyframed 3D settings. Set true only for an explicitly 2D-only script.
 ```
 
 ### part
