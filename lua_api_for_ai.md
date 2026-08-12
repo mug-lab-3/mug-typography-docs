@@ -271,6 +271,31 @@ current pose does not shift. That correction exists because **changing a pivot
 moves the item**; the reverse is not true, and changing an offset never requires
 a pivot correction.
 
+### Moving something to a measured position
+
+Anything measured with `measure_bounds_2d` or `get_canvas_position_2d` must be
+acted on with `place_2d` (or `pivot_at_2d` for pivots), never by writing the
+result into `offset_*`:
+
+```lua
+-- Align a run so its right edge lands on targetX.
+local deltaX = targetX - mt.layout.measure_bounds_2d(ctx, run).right
+for _, index in ipairs(run) do
+    local item = ctx.chars[index]
+    local canvasX, canvasY = mt.layout.get_canvas_position_2d(ctx, item)
+    mt.layout.place_2d(ctx, item, canvasX + deltaX, canvasY)
+end
+```
+
+Those measurements are post-global; `offset_*` is pre-global, so writing a
+measured delta there is off by `global.scale` — correct at `1.0`, silently wrong
+at every other scale.
+
+`geometry.*` and `ctx.font.*` are pre-global and do go into `offset_*` directly
+(`global.scale` applies for free; apply `stretch_*` only to follow it). Multiply
+by `global.scale` and stretch before comparing such a length to
+`measure_bounds_2d`.
+
 ### Angles in detail
 
 - **2D `rotation`** — positive is clockwise.
@@ -549,14 +574,14 @@ colors, or text the user should control, and do not declare unused slots.
 
 `@input <type> <index> "<label>" [default=<value>]`
 
-- `number`: index=1..5; finite default=-1000000..1000000; omitted=0.0
-- `color`: index=1..2; default={r,g,b,a}, channels=0..1; omitted={1,1,1,1}
-- `text`: index=1; quoted single-line NUL-free UTF-8 default<=4096 bytes; omitted=""
+- `number`: index=1..10; finite default=-1000000..1000000; omitted=0.0
+- `color`: index=1..4; default={r,g,b,a}, channels=0..1; omitted={1,1,1,1}
+- `text`: index=1..2; quoted single-line NUL-free UTF-8 default<=4096 bytes; omitted=""
 - label: quoted UTF-8, 1..64 bytes
 - label/text escapes: `\"` and `\\` only
 - each type/index pair: at most once
 - Inspector visibility: declared slots only
-- fixed read-only arrays: numbers=5, colors=2, texts=1; indexes are 1-based
+- fixed read-only arrays: numbers=10, colors=4, texts=2; indexes are 1-based
 
 ## 10. Recipes for common problems
 
@@ -826,11 +851,11 @@ ctx.meta.limits.max_parts : integer [R:init,pre,layout,path read-only]
 ```text
 script_inputs.numbers : number[] [R:init,pre,layout,path read-only]
     unit=unitless
-    Length 5; 1-based.
+    Length 10; 1-based.
 script_inputs.colors : MtColor[] [R:init,pre,layout,path read-only]
-    Length 2; 1-based.
+    Length 4; 1-based.
 script_inputs.texts : string[] [R:init,pre,layout,path read-only]
-    Length 1; 1-based.
+    Length 2; 1-based.
 ```
 
 ### ctx.global
