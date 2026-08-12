@@ -1,4 +1,4 @@
-const CACHE_NAME = "mt-sim-e060b34b7f899ba4";
+const CACHE_NAME = "mt-sim-e9901b82b0cd1e3f";
 const PRECACHE_URLS = [
   "./",
   "apple-touch-icon.png",
@@ -139,13 +139,18 @@ const PRECACHE_URLS = [
   "sample-catalog.json",
   "style-1b4607e9bfdd.css",
   "third-party-notices.md",
-  "web-main-4SJMFY4W.js",
-  "web-main-EZTS765H.css"
+  "web-main-EZTS765H.css",
+  "web-main-MSG6OOAU.js"
 ];
 const DEVELOPMENT = false;
-const BUILD_ID = "e5d25b3f97bf015d";
+const BUILD_ID = "57c47f36feedf1b1";
 const CACHE_PREFIX = "mt-sim-";
 const kPrecacheBatchSize = 8;
+const kFixedNameContent = [
+  "sample-catalog.json",
+  "lua_api_for_ai.md",
+  "third-party-notices.md",
+];
 
 async function precacheApplication() {
   const cache = await caches.open(CACHE_NAME);
@@ -174,7 +179,7 @@ self.addEventListener("activate", (event) => {
           .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME)
           .map((cacheName) => caches.delete(cacheName))
       );
-    }).then(() => self.clientsClaim())
+    }).then(() => self.clients.claim())
   );
 });
 
@@ -219,6 +224,28 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.origin !== self.location.origin || url.pathname.endsWith("/sw.js")) {
+    return;
+  }
+
+  // Content files the app fetches by a fixed name. Unlike the hashed bundles,
+  // their URL does not change when their contents do, so serving them
+  // cache-first would pin them to whichever build first populated the cache --
+  // leaving, say, the sample browser on an older set of samples than the build
+  // it is running. They follow the document strategy instead: network when
+  // reachable, cache only as an offline fallback.
+  if (kFixedNameContent.some((name) => url.pathname.endsWith(`/${name}`))) {
+    event.respondWith(
+      fetch(new Request(event.request, { cache: "no-cache" }))
+        .then(async (response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put(event.request, copy);
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
     return;
   }
 
