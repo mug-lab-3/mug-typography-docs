@@ -2,7 +2,7 @@
      Prose sections come from scripting/ai-preamble.md; reference tables come from
      scripting/api-schema.json. Edit those sources instead. -->
 
-Target API level: **7**. Lua 5.4 for the Mug Typography plugin. Complete contract
+Target API level: **8**. Lua 5.4 for the Mug Typography plugin. Complete contract
 for `ctx`: every field, unit, direction, reference point. Read section 1 first —
 most failures are units, direction or reference point, not syntax.
 
@@ -174,6 +174,7 @@ Every numeric field in the `ctx` reference carries `unit=`, and where meaningful
 | `font_size_percent` | Percent of font size. `100.0` = one font size |
 | `em` | Ratio to font size. `1.0` = 1 em |
 | `multiplier` | `1.0` = unchanged |
+| `unitless` | Dimensionless script input value with no implied neutral point |
 | `unit_interval` | `0.0`–`1.0` |
 | `degrees` | Angle, clockwise-positive for 2D |
 | `px`, `seconds`, `frames`, `fps` | Literal units |
@@ -301,6 +302,34 @@ character.fill.color = { a = 0.5 }        -- keeps r/g/b, changes alpha only
 character.fill.color.a = character.fill.color.a * 0.5
 ```
 
+RGBA is the storage format, not the preferred space for color calculations.
+For derived colors, calculate in the OKLab family and convert back to RGBA:
+
+- Blend two colors : `mt.color.lerp_oklab` : perceptually uniform direct path without a muddy midpoint
+- Travel around the hue circle : `mt.color.lerp_oklch` : independent hue axis and shortest circular path
+- Construct colors or adjust lightness : `mt.color.from_okhsl` / `mt.color.to_okhsl` : normalized saturation and lightness
+
+OKLab and OKLCH are Cartesian and polar representations of the same base color
+space; OKLCH adds independent chroma and hue axes. Use `from_oklch` or
+`from_okhsl` for per-character hue sequences. To change one component of an
+existing color, decompose it with `to_oklch` and rebuild it with `from_oklch`.
+
+```lua
+-- Blend colors; use mt.color.lerp only for exact sRGB component interpolation.
+character.fill.color = mt.color.lerp_oklab(fromColor, toColor, t)
+
+-- Travel around the hue circle; lerp_oklab may pass near the neutral axis.
+character.fill.color = mt.color.lerp_oklch(redColor, blueColor, t)
+```
+
+Use OKHSL, not OKHSV, to raise or lower perceived lightness:
+`lightness = 1.0` is white and `0.0` is black, while OKHSV `value = 1.0`
+means the most vivid color at that hue, not white. Use OKHSV only when HSV-like
+value semantics are required. `mt.color.lerp` remains appropriate when exact
+sRGB component interpolation is intentional or only alpha varies;
+`from_hsv` is retained for compatibility, while new scripts should prefer
+`from_okhsv`.
+
 ## 5. Inheritance
 
 `use` selects *which* value is used; it does not toggle visibility.
@@ -318,7 +347,7 @@ the same callback:
 
 ```lua
 character.fill.use = true
-character.fill.color = mt.color.from_hsv(index / ctx.char_count, 0.8, 1.0)
+character.fill.color = mt.color.from_okhsv(index / ctx.char_count, 0.8, 1.0)
 ```
 
 A gradient (`gradient.color_space ~= "none"`) fills only the regions that
@@ -433,6 +462,10 @@ from the undeformed layout, not recomputed from animated positions.
 `write_on_start` / `write_on_end` control visibility; manual order controls only
 order.
 
+For painting, 2D follows manual order. In 3D, each part's view depth is primary;
+manual order, stroke order, then layout order break equal-depth ties. Write-on
+reveal always follows manual order in both 2D and 3D.
+
 ## 7. Execution environment
 
 - Available: `math`, `string`, `table`, `utf8`, safe base functions.
@@ -477,7 +510,8 @@ recognised.
 -- @title Falling Letters
 -- @author Mug
 -- @version 1.0
--- @api_level 6
+-- @api_level 8
+-- @input number 1 "Amplitude" default=15.0
 --[[ @description
 What the effect does, in a sentence or two.
 ]]
@@ -508,6 +542,21 @@ preset.
 Colours are `#RRGGBB` or `#RRGGBBAA`. Write every key and value exactly as
 spelled above. Other spellings are accepted, but they buy nothing and a header
 is easier to read when there is only one way to write it.
+
+`@input` exposes a user-editable, keyframeable Inspector parameter. Lua reads
+its current value from the matching `ctx.inputs` array; use it for coefficients,
+colors, or text the user should control, and do not declare unused slots.
+
+`@input <type> <index> "<label>" [default=<value>]`
+
+- `number`: index=1..5; finite default=-1000000..1000000; omitted=0.0
+- `color`: index=1..2; default={r,g,b,a}, channels=0..1; omitted={1,1,1,1}
+- `text`: index=1; quoted single-line NUL-free UTF-8 default<=4096 bytes; omitted=""
+- label: quoted UTF-8, 1..64 bytes
+- label/text escapes: `\"` and `\\` only
+- each type/index pair: at most once
+- Inspector visibility: declared slots only
+- fixed read-only arrays: numbers=5, colors=2, texts=1; indexes are 1-based
 
 ## 10. Recipes for common problems
 
@@ -627,7 +676,9 @@ often in generated scripts.
     read, not overwritten. Placement and spacing come from measured values, and
     per-character `scale` / `stretch_*` is followed by `mt.layout.reflow`
     (section 5).
-13. A complete new script declares `-- @api_level 6` in its metadata header.
+13. Derived colors use the appropriate OKLab-family space: OKLab for mixing,
+    OKLCH for hue travel, and OKHSL rather than OKHSV for lightness changes.
+14. A complete new script declares `-- @api_level 8` in its metadata header.
 
 State any assumption you had to make, and name any documentation you needed but
 were not given.
@@ -665,6 +716,8 @@ ctx.font : MtFontMetrics [R:layout,path read-only]
     Resolved font metrics in normalized canvas coordinates.
 ctx.meta : MtMeta [R:init,pre,layout,path read-only]
     Read-only API, plugin, and capability metadata.
+ctx.inputs : MtScriptInputs [R:init,pre,layout,path read-only]
+    Fixed Inspector input arrays.
 ctx.global : MtGlobal [R:pre,layout,path read-only]
     Writable base global parameters.
 ctx.camera : MtCamera [R:pre,layout,path read-only]
@@ -766,6 +819,18 @@ ctx.meta.limits.max_characters : integer [R:init,pre,layout,path read-only]
     Maximum number of characters this instance can lay out and expose to scripts.
 ctx.meta.limits.max_parts : integer [R:init,pre,layout,path read-only]
     Maximum number of parts this instance can lay out and expose to scripts.
+```
+
+### script_inputs
+
+```text
+script_inputs.numbers : number[] [R:init,pre,layout,path read-only]
+    unit=unitless
+    Length 5; 1-based.
+script_inputs.colors : MtColor[] [R:init,pre,layout,path read-only]
+    Length 2; 1-based.
+script_inputs.texts : string[] [R:init,pre,layout,path read-only]
+    Length 1; 1-based.
 ```
 
 ### ctx.global
@@ -1352,6 +1417,12 @@ mt.timeline : MtTimelineUtilities
     Timeline progress and interpolation namespace.
 mt.text : MtTextUtilities
     UTF-8 safe text processing namespace.
+mt.CHAR : integer
+    Character kind flag for target and order entries; combine it with a one-based character index.
+mt.PART : integer
+    Part kind flag for target and order entries; combine it with a one-based global part index.
+mt.NOT : integer
+    Exclusion flag reserved for target entries; mt.order_text rejects it.
 mt.clamp(value, low, high) -> number
     Clamp a value into a range.
 mt.saturate(value) -> number
@@ -1368,6 +1439,8 @@ mt.lerp_angle(from, to, t) -> number
     Interpolate degrees along the shortest angular path.
 mt.distribute(index, count) -> number
     Map a one-based index evenly across 0 through 1.
+mt.order_text(entries) -> string
+    Convert encoded character and part indices into validated manual-order text while preserving input order.
 mt.each_char(ctx, options?) -> function
     Iterate shaped characters with optional filtering. Yields the ctx.chars index, the character, and a reusable info table with progress, n, count, first and last. Options: from, to (index range), line (line_index filter), order ('asc'|'desc'|'center'|'random') selecting how info.progress spans 0 through 1, seed for the random order. info is reused every iteration: copy values out to keep them.
 mt.each_part(ctx, options?) -> function
@@ -1396,6 +1469,8 @@ mt.random(seed, index, channel?) -> number
     Stable order-independent random value with an optional named channel.
 mt.random_range(seed, index, low, high, channel?) -> number
     Stable random value in a requested range with an optional named channel.
+mt.distributed_random(seed, index, count, low, high, channel?) -> number
+    Assign one of count evenly spaced values in a stable seeded permutation.
 mt.noise1(x, seed?) -> number
     Deterministic smooth one-dimensional value noise.
 mt.noise2(x, y, seed?) -> number
@@ -1441,6 +1516,28 @@ mt.color.with_alpha(color, alpha) -> MtColor
     Copy a color while replacing its alpha channel.
 mt.color.from_oklch(lightness, chroma, hue, alpha?) -> MtColor
     Create an RGBA color from OKLCH components.
+mt.color.from_oklab(lightness, aAxis, bAxis, alpha?) -> MtColor
+    Create an RGBA color from OKLab components.
+mt.color.to_oklab(color) -> { lightness, a, b, alpha }
+    Convert an RGBA color to { lightness, a, b, alpha } OKLab components.
+mt.color.to_oklch(color) -> { lightness, chroma, hue, alpha }
+    Convert an RGBA color to { lightness, chroma, hue, alpha } OKLCH components.
+mt.color.from_okhsv(hue, saturation, value, alpha?) -> MtColor
+    Create an RGBA color from gamut-normalized OKHSV components.
+mt.color.to_okhsv(color) -> { hue, saturation, value, alpha }
+    Convert an RGBA color to { hue, saturation, value, alpha } OKHSV components.
+mt.color.from_okhsl(hue, saturation, lightness, alpha?) -> MtColor
+    Create an RGBA color from gamut-normalized OKHSL components.
+mt.color.to_okhsl(color) -> { hue, saturation, lightness, alpha }
+    Convert an RGBA color to { hue, saturation, lightness, alpha } OKHSL components.
+mt.color.lerp_oklab(from, to, t) -> MtColor
+    Interpolate two RGBA colors in OKLab space.
+mt.color.lerp_oklch(from, to, t) -> MtColor
+    Interpolate two RGBA colors in OKLCH space along the shortest hue path.
+mt.color.lerp_okhsv(from, to, t) -> MtColor
+    Interpolate two RGBA colors in OKHSV space along the shortest hue path.
+mt.color.lerp_okhsl(from, to, t) -> MtColor
+    Interpolate two RGBA colors in OKHSL space along the shortest hue path.
 ```
 
 ### mt.ease.*
@@ -1598,12 +1695,13 @@ start from Index by Purpose when you only know the goal. Do not read end to end.
 - Value constraints and range mapping : `mt.clamp` / `mt.saturate` / `mt.remap` / `mt.wrap`
 - Interpolation and keyframes : `mt.lerp` / `mt.inverse_lerp` / `mt.lerp_angle` / `mt.smoothstep` / `mt.keyframes`
 - Progress distribution (domino, cascade, typewriter) : `mt.distribute` / `mt.stagger` / `mt.stagger_progress` / `mt.stagger_pattern`
+- Manual drawing and Write On order : `mt.order_text` / `mt.CHAR` / `mt.PART` / `mt.NOT`
 - Distance-based influence (wavefront, shine, ripple, shockwave) : `mt.falloff`
-- Deterministic random values and noise (scatter, camera shake, tremor) : `mt.random` / `mt.random_range` / `mt.noise1` / `mt.noise2` / `mt.wiggle`
+- Deterministic random values and noise (scatter, camera shake, tremor) : `mt.random` / `mt.random_range` / `mt.distributed_random` / `mt.noise1` / `mt.noise2` / `mt.wiggle`
 - Cycles and springs (floating, harmonic wave, damped oscillation) : `mt.cycle` / `mt.pingpong` / `mt.wave` / `mt.wave_square` / `mt.wave_triangle` / `mt.wave_sawtooth` / `mt.spring`
 - Displacement from polar coordinates (radial scatter, orbit, explosion) : `mt.polar_offset_2d`
 - Physical motion (ballistic trajectory, ground bounce, friction decay) : `mt.bounce_y` / `mt.bounce_x` / `mt.bounce_ground` / `mt.bounce_wall` / `mt.impact_squash` / `mt.projectile_2d` / `mt.friction_decay`
-- Color (hue shift, interpolation, perceptually uniform) : `mt.color.resolve_fill` / `mt.color.lerp` / `mt.color.from_hsv` / `mt.color.with_alpha` / `mt.color.from_oklch`
+- Color (hue shift, interpolation, perceptually uniform) : `mt.color.resolve_fill` / `mt.color.from_*` / `mt.color.to_*` / `mt.color.lerp*` / `mt.color.with_alpha`
 - Easing : `mt.ease.*`
 - Reflow and line-based grouping : `mt.layout.reflow` / `mt.layout.group_by_line`
 - Canvas position, distance, and pivot : `mt.layout.place_2d` / `mt.layout.get_canvas_position_2d` / `mt.layout.canvas_to_offset_2d` / `mt.layout.radial_distance` / `mt.layout.pivot_at_2d`
@@ -1786,8 +1884,41 @@ RET
 -- Arrange hues in a rainbow according to character position
 local hue = mt.distribute(index, ctx.char_count)
 character.fill.use = true
-character.fill.color = mt.color.from_hsv(hue, 0.8, 1.0)
+character.fill.color = mt.color.from_okhsv(hue, 0.8, 1.0)
 ```
+
+#### `mt.order_text(entries)`
+
+Converts encoded character or global-part indices into validated `ctx.output.manual_order_text`. Input order and duplicates are preserved.
+
+Use a plain 1-based index or `mt.CHAR | index` for a character, and `mt.PART | index` for a global part. Each index must be an integer from 1 through 1024. `mt.NOT` is rejected because manual order has no exclusion syntax.
+
+ARGS
+- `entries` (`integer[]`) Encoded character and global-part indices in output order
+
+RET
+- `string` -- Valid manual-order text representing the input sequence; an empty array returns an empty string
+
+```lua
+local order = {}
+for index = ctx.char_count, 1, -1 do
+    order[#order + 1] = mt.CHAR | index
+end
+ctx.output.manual_order_enabled = true
+ctx.output.manual_order_text = mt.order_text(order)
+```
+
+#### `mt.CHAR`
+
+Value: `0x0000`. Character-kind flag; combine it with a 1-based character index. Because the value is zero, a plain index is equivalent.
+
+#### `mt.PART`
+
+Value: `0x10000`. Global-part-kind flag; combine it with a 1-based global part index. The low 16 bits are reserved for the index.
+
+#### `mt.NOT`
+
+Value: `0x20000`. Exclusion flag reserved for target syntax. Do not pass it to `mt.order_text`.
 
 #### `mt.each_char(ctx, options?)`
 
@@ -2025,6 +2156,28 @@ ARGS
 
 RET
 - `number` Same as the output range -- Stable random value in `[low, high)`
+
+#### `mt.distributed_random(seed, index, count, low, high, channel?)`
+
+Assigns `count` evenly spaced values in `[low, high)` to 1-based indices through a deterministic permutation. Unlike independent calls to `mt.random_range`, the complete set has no clusters or duplicate values. Use `info.n` and `info.count` with `mt.each_char` or `mt.each_part` so filtered indices remain contiguous.
+
+ARGS
+- `seed` (`integer`) Value selecting the permutation and common offset
+- `index` (`integer`) Assignment position from 1 through `count`
+- `count` (`integer`) Number of values; must be at least 1
+- `low` / `high` (`number`) Finite output bounds with `low < high`
+- `channel` (`string` optional) Name separating independent assignments
+
+RET
+- `number` Same as the output range -- Stable assigned value in `[low, high)`; adjacent sorted values differ by `(high - low) / count`
+
+```lua
+for _, character, info in mt.each_char(ctx) do
+    local phase = mt.distributed_random(
+        ctx.meta.instance_seed, info.n, info.count, 0.0, math.pi * 2.0, "phase")
+    character.offset_y = 0.5 + mt.wave(ctx.time, 0.5, phase) * 0.03
+end
+```
 
 #### `mt.noise1(x, seed?)`
 
@@ -2535,7 +2688,7 @@ character.offset_x = 0.5 - 0.5 + travelled
 ### 9. Color
 
 See [“color” in Concepts](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-color) for the color format.
-All functions return a new color table and do not modify their arguments.
+RGBA is the color storage format. When calculating colors, select the color space that matches the intent.
 
 #### `mt.color.resolve_fill(ctx, target)`
 
@@ -2576,54 +2729,32 @@ for _, part in mt.each_part(ctx) do
 end
 ```
 
-#### `mt.color.lerp(from, to, t)`
+#### Color construction, decomposition, and interpolation
 
-Linearly interpolates two colors component by component (RGBA).
+The functions below return new tables and do not modify their arguments. `from_*` constructs a color
+from components, `to_*` decomposes a color into a component table, and `lerp*` constructs a color from
+two colors and `t`. An omitted `alpha`, or a missing `a` in a color passed to `to_*`, becomes `1.0`.
+`hue` uses one full turn as its unit; out-of-range input wraps to `[0, 1)`. No interpolation function
+clamps `t`. OKHSV/OKHSL `saturation`, `value`, and `lightness` inputs are constrained to 0–1.
+`lerp_oklch` / `lerp_okhsv` / `lerp_okhsl` take the shortest hue path, choose the increasing direction
+for an exact half-turn, and inherit the colored endpoint's hue when the other endpoint is achromatic.
 
-ARGS
-- `from` (`color`) Color when `t = 0`
-- `to` (`color`) Color when `t = 1`
-- `t` (`number`) Interpolation factor. Not clamped
+- `mt.color.lerp(from, to, t)` — Linearly interpolates RGBA components.
+- `mt.color.from_hsv(hue, saturation, value, alpha?)` — Constructs a color from normalized HSV.
+- `mt.color.with_alpha(color, alpha)` — Preserves RGB and replaces only alpha.
+- `mt.color.from_oklch(lightness, chroma, hue, alpha?)` — Constructs a color from OKLCH. Chroma is normally about 0–0.4, and RGB output is constrained to 0–1.
 
-RET
-- `color` -- New color with each RGBA component interpolated
-
-#### `mt.color.from_hsv(hue, saturation, value, alpha?)`
-
-Creates a color from normalized HSV values. This is a standard choice for hue animation.
-
-ARGS
-- `hue` (`number` 0–1) Hue. `1` completes one full turn, and values outside the range wrap automatically
-- `saturation` (`number` 0–1) Saturation
-- `value` (`number` 0–1) Brightness
-- `alpha` (`number` 0–1 default `1.0`) Alpha value
-
-RET
-- `color` -- RGBA color converted from HSV
-
-#### `mt.color.with_alpha(color, alpha)`
-
-Returns a new color with only its alpha replaced, preserving RGB.
-
-ARGS
-- `color` (`color`) Original color
-- `alpha` (`number` 0–1) New alpha value
-
-RET
-- `color` -- New color preserving RGB and replacing only alpha
-
-#### `mt.color.from_oklch(lightness, chroma, hue, alpha?)`
-
-Generates an RGBA color from the perceptually uniform OKLCH color space.
-
-ARGS
-- `lightness` (`number` 0–1) Lightness
-- `chroma` (`number`) Colorfulness. Normally specified from about `0` to `0.4`
-- `hue` (`number` 0–1) Hue. `1` completes one full turn, and values outside the range wrap automatically
-- `alpha` (`number` 0–1 default `1.0`) Alpha value
-
-RET
-- `color` -- New color converted to sRGB, with each RGB component constrained to 0–1
+- `mt.color.from_oklab(lightness, aAxis, bAxis, alpha?)` — Creates an RGBA color from OKLab components. RGB output is constrained to 0–1.
+- `mt.color.to_oklab(color)` — Converts to `{ lightness, a, b, alpha }`. Input RGB is not clamped.
+- `mt.color.to_oklch(color)` — Converts to `{ lightness, chroma, hue, alpha }`. Achromatic hue is 0.
+- `mt.color.from_okhsv(hue, saturation, value, alpha?)` — Creates a color from gamut-normalized OKHSV.
+- `mt.color.to_okhsv(color)` — Converts to `{ hue, saturation, value, alpha }`. Achromatic hue is 0.
+- `mt.color.from_okhsl(hue, saturation, lightness, alpha?)` — Creates a color from gamut-normalized OKHSL.
+- `mt.color.to_okhsl(color)` — Converts to `{ hue, saturation, lightness, alpha }`. Achromatic hue is 0.
+- `mt.color.lerp_oklab(from, to, t)` — Interpolates in Cartesian OKLab coordinates.
+- `mt.color.lerp_oklch(from, to, t)` — Interpolates in OKLCH along the shortest hue path.
+- `mt.color.lerp_okhsv(from, to, t)` — Interpolates in OKHSV along the shortest hue path.
+- `mt.color.lerp_okhsl(from, to, t)` — Interpolates in OKHSL along the shortest hue path.
 
 ### 10. Easing
 

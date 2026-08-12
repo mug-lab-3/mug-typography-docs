@@ -20,6 +20,13 @@ mt.path = {}
 mt.timeline = {}
 mt.text = {}
 
+---Character index kind for target and order entries.
+mt.CHAR = 0x0000
+---Global part index kind for target and order entries.
+mt.PART = 0x10000
+---Exclusion modifier for target entries. Rejected by mt.order_text.
+mt.NOT = 0x20000
+
 -- Rebuilt by the host before each OnInitialize run, then frozen with
 -- mt.__freeze (see the storage section at the bottom of this file).
 ---@type table
@@ -132,6 +139,92 @@ function mt.distribute(index, count)
         result = mt.saturate((index - 1.0) / (count - 1.0))
     end
     return result
+end
+
+local kOrderIndexMask = 0xffff
+local kOrderKindMask = mt.PART | mt.NOT
+local kOrderKnownMask = kOrderIndexMask | kOrderKindMask
+local kMaximumOrderIndex = 1024
+local kMinimumCompressedOrderRunLength = 3
+
+---@param entry unknown
+---@param entryPosition integer
+---@return string prefix
+---@return integer index
+local function decodeOrderEntry(entry, entryPosition)
+    if type(entry) ~= "number" or math.tointeger(entry) == nil then
+        error("mt.order_text: entry " .. entryPosition .. " must be an integer", 3)
+    end
+    local integerEntry = math.tointeger(entry)
+    if integerEntry < 1 then
+        error("mt.order_text: entry " .. entryPosition ..
+            " index must be an integer between 1 and 1024", 3)
+    end
+    if integerEntry & ~kOrderKnownMask ~= 0 then
+        error("mt.order_text: entry " .. entryPosition .. " has an unknown kind flag", 3)
+    end
+    if integerEntry & mt.NOT ~= 0 then
+        error("mt.order_text: entry " .. entryPosition ..
+            " cannot use mt.NOT; manual order has no exclusion", 3)
+    end
+
+    local index = integerEntry & kOrderIndexMask
+    if index < 1 or index > kMaximumOrderIndex then
+        error("mt.order_text: entry " .. entryPosition ..
+            " index must be an integer between 1 and 1024", 3)
+    end
+    local prefix = "c"
+    if integerEntry & mt.PART ~= 0 then
+        prefix = "p"
+    end
+    return prefix, index
+end
+
+---@param tokens string[]
+---@param prefix string
+---@param firstIndex integer
+---@param lastIndex integer
+---@param runLength integer
+local function appendOrderRun(tokens, prefix, firstIndex, lastIndex, runLength)
+    if runLength >= kMinimumCompressedOrderRunLength then
+        tokens[#tokens + 1] = prefix .. firstIndex .. "-" .. lastIndex
+    else
+        for index = firstIndex, lastIndex do
+            tokens[#tokens + 1] = prefix .. index
+        end
+    end
+end
+
+---Build a validated Manual Order string from encoded character or part indices.
+---@param entries integer[] character indices, or mt.PART | index for global parts
+---@return string
+function mt.order_text(entries)
+    if type(entries) ~= "table" then
+        error("mt.order_text: entries must be an array", 2)
+    end
+
+    local tokens = {}
+    local entryPosition = 1
+    while entryPosition <= #entries do
+        local prefix, firstIndex = decodeOrderEntry(entries[entryPosition], entryPosition)
+        local lastIndex = firstIndex
+        local runLength = 1
+        local nextPosition = entryPosition + 1
+        local runContinues = true
+        while nextPosition <= #entries and runContinues do
+            local nextPrefix, nextIndex = decodeOrderEntry(entries[nextPosition], nextPosition)
+            if nextPrefix == prefix and nextIndex == lastIndex + 1 then
+                lastIndex = nextIndex
+                runLength = runLength + 1
+                nextPosition = nextPosition + 1
+            else
+                runContinues = false
+            end
+        end
+        appendOrderRun(tokens, prefix, firstIndex, lastIndex, runLength)
+        entryPosition = entryPosition + runLength
+    end
+    return table.concat(tokens, " ")
 end
 
 ---Smooth 0 -> 1 transition (Hermite) as value crosses [edge0, edge1].
@@ -372,6 +465,54 @@ function mt.random_range(seed, index, low, high, channel)
     return mt.lerp(low, high, mt.random(seed, index, channel))
 end
 
+local function isFiniteNumber(value)
+    return type(value) == "number" and value == value and
+        value ~= math.huge and value ~= -math.huge
+end
+
+---Assign an evenly spaced value in [low, high) through a deterministic permutation.
+---@param seed integer
+---@param index integer one-based position in the assignment
+---@param count integer number of assigned values
+---@param low number inclusive lower bound
+---@param high number exclusive upper bound
+---@param channel string|nil independent named random channel
+---@return number
+function mt.distributed_random(seed, index, count, low, high, channel)
+    if type(seed) ~= "number" or math.tointeger(seed) == nil then
+        error("mt.distributed_random: seed must be an integer", 2)
+    end
+    if type(count) ~= "number" or math.tointeger(count) == nil or count < 1 then
+        error("mt.distributed_random: count must be an integer greater than or equal to 1", 2)
+    end
+    local countInteger = math.tointeger(count)
+    if type(index) ~= "number" or math.tointeger(index) == nil or
+        index < 1 or index > countInteger then
+        error("mt.distributed_random: index must be an integer between 1 and count", 2)
+    end
+    if not isFiniteNumber(low) or not isFiniteNumber(high) or low >= high then
+        error("mt.distributed_random: low and high must be finite numbers with low < high", 2)
+    end
+    if channel ~= nil and type(channel) ~= "string" then
+        error("mt.distributed_random: channel must be a string", 2)
+    end
+
+    local shuffledPosition = math.tointeger(index)
+    for upperPosition = countInteger, 2, -1 do
+        local swapPosition = math.floor(
+            mt.random(seed, upperPosition, channel) * upperPosition) + 1
+        if shuffledPosition == upperPosition then
+            shuffledPosition = swapPosition
+        elseif shuffledPosition == swapPosition then
+            shuffledPosition = upperPosition
+        end
+    end
+
+    local commonOffset = mt.random(seed, countInteger + 1, channel)
+    local normalized = (shuffledPosition - 1 + commonOffset) / countInteger
+    return low * (1.0 - normalized) + high * normalized
+end
+
 ---@param value number
 ---@return number
 local function noiseInterpolation(value)
@@ -529,52 +670,533 @@ function mt.color.with_alpha(color, alpha)
     return { r = color.r, g = color.g, b = color.b, a = alpha }
 end
 
----Create an RGBA color from OKLCH components.
----@param lightness number Lightness [0, 1]
----@param chroma number Chroma [0, ~0.4]
----@param hue number Hue in [0, 1] (where 1 wraps around)
----@param alpha number|nil defaults to 1.0
----@return MtColor
-function mt.color.from_oklch(lightness, chroma, hue, alpha)
-    local light = lightness
-    local chrom = chroma
-    local h = mt.wrap(hue, 0.0, 1.0) * 2.0 * math.pi
+local achromaticEpsilon = 1.0e-7
 
-    local a = chrom * math.cos(h)
-    local b = chrom * math.sin(h)
+local function cubeRoot(value)
+    if value < 0.0 then
+        return -((-value) ^ (1.0 / 3.0))
+    end
+    return value ^ (1.0 / 3.0)
+end
 
-    -- OKLab to LMS
-    local l_ = light + 0.3963377774 * a + 0.2158037573 * b
-    local m_ = light - 0.1055613458 * a - 0.0638541728 * b
-    local s_ = light - 0.0894841775 * a - 1.2914855480 * b
+local function srgbTransfer(value)
+    if value > 0.0031308 then
+        return 1.055 * (value ^ (1.0 / 2.4)) - 0.055
+    end
+    return 12.92 * value
+end
 
-    -- Non-linear LMS to Linear LMS
-    local l_lin = l_ * l_ * l_
-    local m_lin = m_ * m_ * m_
-    local s_lin = s_ * s_ * s_
+local function srgbTransferInverse(value)
+    if value > 0.04045 then
+        return ((value + 0.055) / 1.055) ^ 2.4
+    end
+    return value / 12.92
+end
 
-    -- LMS to Linear RGB (D65)
-    local r_lin =  4.0767416621 * l_lin - 3.3077115913 * m_lin + 0.2309699292 * s_lin
-    local g_lin = -1.2684380046 * l_lin + 2.6097574011 * m_lin - 0.3413193965 * s_lin
-    local b_lin = -0.0041960863 * l_lin - 0.7034186147 * m_lin + 1.7076147010 * s_lin
+local function linearSrgbToOklab(red, green, blue)
+    local l = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue
+    local m = 0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue
+    local s = 0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue
+    local lRoot = cubeRoot(l)
+    local mRoot = cubeRoot(m)
+    local sRoot = cubeRoot(s)
+    return {
+        lightness = 0.2104542553 * lRoot + 0.7936177850 * mRoot - 0.0040720468 * sRoot,
+        a = 1.9779984951 * lRoot - 2.4285922050 * mRoot + 0.4505937099 * sRoot,
+        b = 0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.8086757660 * sRoot,
+    }
+end
 
-    -- Linear RGB to sRGB gamma correction
-    local function toSrgb(val)
-        local res = val
-        if val > 0.0031308 then
-            res = 1.055 * (val ^ (1.0 / 2.4)) - 0.055
-        else
-            res = 12.92 * val
-        end
-        return mt.clamp(res, 0.0, 1.0)
+local function oklabToLinearSrgb(lightness, aAxis, bAxis)
+    local lRoot = lightness + 0.3963377774 * aAxis + 0.2158037573 * bAxis
+    local mRoot = lightness - 0.1055613458 * aAxis - 0.0638541728 * bAxis
+    local sRoot = lightness - 0.0894841775 * aAxis - 1.2914855480 * bAxis
+    local l = lRoot * lRoot * lRoot
+    local m = mRoot * mRoot * mRoot
+    local s = sRoot * sRoot * sRoot
+    return {
+        r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        b = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    }
+end
+
+local function oklabToColor(lightness, aAxis, bAxis, alpha)
+    local linear = oklabToLinearSrgb(lightness, aAxis, bAxis)
+    return {
+        r = mt.saturate(srgbTransfer(linear.r)),
+        g = mt.saturate(srgbTransfer(linear.g)),
+        b = mt.saturate(srgbTransfer(linear.b)),
+        a = alpha == nil and 1.0 or alpha,
+    }
+end
+
+local function computeMaxSaturation(aAxis, bAxis)
+    local coefficient0, coefficient1, coefficient2, coefficient3, coefficient4
+    local weightL, weightM, weightS
+    if -1.88170328 * aAxis - 0.80936493 * bAxis > 1.0 then
+        coefficient0, coefficient1, coefficient2 = 1.19086277, 1.76576728, 0.59662641
+        coefficient3, coefficient4 = 0.75515197, 0.56771245
+        weightL, weightM, weightS = 4.0767416621, -3.3077115913, 0.2309699292
+    elseif 1.81444104 * aAxis - 1.19445276 * bAxis > 1.0 then
+        coefficient0, coefficient1, coefficient2 = 0.73956515, -0.45954404, 0.08285427
+        coefficient3, coefficient4 = 0.12541070, 0.14503204
+        weightL, weightM, weightS = -1.2684380046, 2.6097574011, -0.3413193965
+    else
+        coefficient0, coefficient1, coefficient2 = 1.35733652, -0.00915799, -1.15130210
+        coefficient3, coefficient4 = -0.50559606, 0.00692167
+        weightL, weightM, weightS = -0.0041960863, -0.7034186147, 1.7076147010
     end
 
+    local saturation = coefficient0 + coefficient1 * aAxis + coefficient2 * bAxis +
+        coefficient3 * aAxis * aAxis + coefficient4 * aAxis * bAxis
+    local factorL = 0.3963377774 * aAxis + 0.2158037573 * bAxis
+    local factorM = -0.1055613458 * aAxis - 0.0638541728 * bAxis
+    local factorS = -0.0894841775 * aAxis - 1.2914855480 * bAxis
+    local lRoot = 1.0 + saturation * factorL
+    local mRoot = 1.0 + saturation * factorM
+    local sRoot = 1.0 + saturation * factorS
+    local l = lRoot * lRoot * lRoot
+    local m = mRoot * mRoot * mRoot
+    local s = sRoot * sRoot * sRoot
+    local lFirst = 3.0 * factorL * lRoot * lRoot
+    local mFirst = 3.0 * factorM * mRoot * mRoot
+    local sFirst = 3.0 * factorS * sRoot * sRoot
+    local lSecond = 6.0 * factorL * factorL * lRoot
+    local mSecond = 6.0 * factorM * factorM * mRoot
+    local sSecond = 6.0 * factorS * factorS * sRoot
+    local value = weightL * l + weightM * m + weightS * s
+    local first = weightL * lFirst + weightM * mFirst + weightS * sFirst
+    local second = weightL * lSecond + weightM * mSecond + weightS * sSecond
+    return saturation - value * first / (first * first - 0.5 * value * second)
+end
+
+local function findCusp(aAxis, bAxis)
+    local saturation = computeMaxSaturation(aAxis, bAxis)
+    local rgb = oklabToLinearSrgb(1.0, saturation * aAxis, saturation * bAxis)
+    local lightness = cubeRoot(1.0 / math.max(rgb.r, rgb.g, rgb.b))
+    return { lightness = lightness, chroma = lightness * saturation }
+end
+
+local function findGamutIntersection(aAxis, bAxis, lightness1, chroma1, lightness0, cusp)
+    local intersection
+    if (lightness1 - lightness0) * cusp.chroma - (cusp.lightness - lightness0) * chroma1 <= 0.0 then
+        intersection = cusp.chroma * lightness0 /
+            (chroma1 * cusp.lightness + cusp.chroma * (lightness0 - lightness1))
+    else
+        intersection = cusp.chroma * (lightness0 - 1.0) /
+            (chroma1 * (cusp.lightness - 1.0) + cusp.chroma * (lightness0 - lightness1))
+        local deltaLightness = lightness1 - lightness0
+        local deltaChroma = chroma1
+        local factorL = 0.3963377774 * aAxis + 0.2158037573 * bAxis
+        local factorM = -0.1055613458 * aAxis - 0.0638541728 * bAxis
+        local factorS = -0.0894841775 * aAxis - 1.2914855480 * bAxis
+        local lDelta = deltaLightness + deltaChroma * factorL
+        local mDelta = deltaLightness + deltaChroma * factorM
+        local sDelta = deltaLightness + deltaChroma * factorS
+        local lightness = lightness0 * (1.0 - intersection) + intersection * lightness1
+        local chroma = intersection * chroma1
+        local lRoot = lightness + chroma * factorL
+        local mRoot = lightness + chroma * factorM
+        local sRoot = lightness + chroma * factorS
+        local l = lRoot * lRoot * lRoot
+        local m = mRoot * mRoot * mRoot
+        local s = sRoot * sRoot * sRoot
+        local lFirst = 3.0 * lDelta * lRoot * lRoot
+        local mFirst = 3.0 * mDelta * mRoot * mRoot
+        local sFirst = 3.0 * sDelta * sRoot * sRoot
+        local lSecond = 6.0 * lDelta * lDelta * lRoot
+        local mSecond = 6.0 * mDelta * mDelta * mRoot
+        local sSecond = 6.0 * sDelta * sDelta * sRoot
+
+        local function channelCorrection(value, first, second)
+            local ratio = first / (first * first - 0.5 * value * second)
+            if ratio < 0.0 then
+                return math.huge
+            end
+            return -value * ratio
+        end
+
+        local red = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s - 1.0
+        local redFirst = 4.0767416621 * lFirst - 3.3077115913 * mFirst + 0.2309699292 * sFirst
+        local redSecond = 4.0767416621 * lSecond - 3.3077115913 * mSecond + 0.2309699292 * sSecond
+        local green = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s - 1.0
+        local greenFirst = -1.2684380046 * lFirst + 2.6097574011 * mFirst - 0.3413193965 * sFirst
+        local greenSecond = -1.2684380046 * lSecond + 2.6097574011 * mSecond - 0.3413193965 * sSecond
+        local blue = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s - 1.0
+        local blueFirst = -0.0041960863 * lFirst - 0.7034186147 * mFirst + 1.7076147010 * sFirst
+        local blueSecond = -0.0041960863 * lSecond - 0.7034186147 * mSecond + 1.7076147010 * sSecond
+        intersection = intersection + math.min(
+            channelCorrection(red, redFirst, redSecond),
+            channelCorrection(green, greenFirst, greenSecond),
+            channelCorrection(blue, blueFirst, blueSecond))
+    end
+    return intersection
+end
+
+local function toe(value)
+    local coefficient1 = 0.206
+    local coefficient2 = 0.03
+    local coefficient3 = (1.0 + coefficient1) / (1.0 + coefficient2)
+    local term = coefficient3 * value - coefficient1
+    return 0.5 * (term + math.sqrt(term * term + 4.0 * coefficient2 * coefficient3 * value))
+end
+
+local function toeInverse(value)
+    local coefficient1 = 0.206
+    local coefficient2 = 0.03
+    local coefficient3 = (1.0 + coefficient1) / (1.0 + coefficient2)
+    return (value * value + coefficient1 * value) / (coefficient3 * (value + coefficient2))
+end
+
+local function getStMid(aAxis, bAxis)
+    local saturation = 0.11516993 + 1.0 / (7.44778970 + 4.15901240 * bAxis +
+        aAxis * (-2.19557347 + 1.75198401 * bAxis +
+        aAxis * (-2.13704948 - 10.02301043 * bAxis +
+        aAxis * (-4.24894561 + 5.38770819 * bAxis + 4.69891013 * aAxis))))
+    local triangular = 0.11239642 + 1.0 / (1.61320320 - 0.68124379 * bAxis +
+        aAxis * (0.40370612 + 0.90148123 * bAxis +
+        aAxis * (-0.27087943 + 0.61223990 * bAxis +
+        aAxis * (0.00299215 - 0.45399568 * bAxis - 0.14661872 * aAxis))))
+    return saturation, triangular
+end
+
+local function getCs(lightness, aAxis, bAxis)
+    local cusp = findCusp(aAxis, bAxis)
+    local maximumChroma = findGamutIntersection(aAxis, bAxis, lightness, 1.0, lightness, cusp)
+    local maximumSaturation = cusp.chroma / cusp.lightness
+    local maximumTriangular = cusp.chroma / (1.0 - cusp.lightness)
+    local scale = maximumChroma /
+        math.min(lightness * maximumSaturation, (1.0 - lightness) * maximumTriangular)
+    local midSaturation, midTriangular = getStMid(aAxis, bAxis)
+    local chromaA = lightness * midSaturation
+    local chromaB = (1.0 - lightness) * midTriangular
+    local midChroma = 0.9 * scale *
+        math.sqrt(math.sqrt(1.0 / (1.0 / chromaA ^ 4.0 + 1.0 / chromaB ^ 4.0)))
+    chromaA = lightness * 0.4
+    chromaB = (1.0 - lightness) * 0.8
+    local zeroChroma = math.sqrt(1.0 / (1.0 / (chromaA * chromaA) + 1.0 / (chromaB * chromaB)))
+    return zeroChroma, midChroma, maximumChroma
+end
+
+local function neutralSrgb(perceptualLightness)
+    local linear = oklabToLinearSrgb(toeInverse(perceptualLightness), 0.0, 0.0)
+    return srgbTransfer(linear.r), srgbTransfer(linear.g), srgbTransfer(linear.b)
+end
+
+local function okhslToSrgb(hue, saturation, lightness)
+    if lightness <= 0.0 then
+        return 0.0, 0.0, 0.0
+    elseif lightness >= 1.0 then
+        return 1.0, 1.0, 1.0
+    elseif saturation <= achromaticEpsilon then
+        return neutralSrgb(lightness)
+    end
+    local angle = 2.0 * math.pi * hue
+    local aAxis = math.cos(angle)
+    local bAxis = math.sin(angle)
+    local oklabLightness = toeInverse(lightness)
+    local zeroChroma, midChroma, maximumChroma = getCs(oklabLightness, aAxis, bAxis)
+    local midpoint = 0.8
+    local chroma
+    if saturation < midpoint then
+        local interpolation = saturation / midpoint
+        local coefficient1 = midpoint * zeroChroma
+        local coefficient2 = 1.0 - coefficient1 / midChroma
+        chroma = interpolation * coefficient1 / (1.0 - coefficient2 * interpolation)
+    else
+        local interpolation = (saturation - midpoint) / (1.0 - midpoint)
+        local coefficient0 = midChroma
+        local coefficient1 = (1.0 - midpoint) * midChroma * midChroma /
+            (midpoint * midpoint * zeroChroma)
+        local coefficient2 = 1.0 - coefficient1 / (maximumChroma - midChroma)
+        chroma = coefficient0 + interpolation * coefficient1 / (1.0 - coefficient2 * interpolation)
+    end
+    local linear = oklabToLinearSrgb(oklabLightness, chroma * aAxis, chroma * bAxis)
+    return srgbTransfer(linear.r), srgbTransfer(linear.g), srgbTransfer(linear.b)
+end
+
+local function srgbToOkhsl(red, green, blue)
+    local lab = linearSrgbToOklab(
+        srgbTransferInverse(red), srgbTransferInverse(green), srgbTransferInverse(blue))
+    local chroma = math.sqrt(lab.a * lab.a + lab.b * lab.b)
+    if chroma <= achromaticEpsilon then
+        return 0.0, 0.0, toe(lab.lightness)
+    end
+    local aAxis = lab.a / chroma
+    local bAxis = lab.b / chroma
+    local hue = mt.wrap(0.5 + 0.5 * math.atan(-lab.b, -lab.a) / math.pi, 0.0, 1.0)
+    local zeroChroma, midChroma, maximumChroma = getCs(lab.lightness, aAxis, bAxis)
+    local midpoint = 0.8
+    local saturation
+    if chroma < midChroma then
+        local coefficient1 = midpoint * zeroChroma
+        local coefficient2 = 1.0 - coefficient1 / midChroma
+        saturation = midpoint * chroma / (coefficient1 + coefficient2 * chroma)
+    else
+        local coefficient0 = midChroma
+        local coefficient1 = (1.0 - midpoint) * midChroma * midChroma /
+            (midpoint * midpoint * zeroChroma)
+        local coefficient2 = 1.0 - coefficient1 / (maximumChroma - midChroma)
+        local interpolation = (chroma - coefficient0) /
+            (coefficient1 + coefficient2 * (chroma - coefficient0))
+        saturation = midpoint + (1.0 - midpoint) * interpolation
+    end
+    return hue, saturation, toe(lab.lightness)
+end
+
+local function okhsvToSrgb(hue, saturation, value)
+    if value <= 0.0 then
+        return 0.0, 0.0, 0.0
+    elseif saturation <= achromaticEpsilon then
+        return neutralSrgb(value)
+    end
+    local angle = 2.0 * math.pi * hue
+    local aAxis = math.cos(angle)
+    local bAxis = math.sin(angle)
+    local cusp = findCusp(aAxis, bAxis)
+    local maximumSaturation = cusp.chroma / cusp.lightness
+    local maximumTriangular = cusp.chroma / (1.0 - cusp.lightness)
+    local saturationZero = 0.5
+    local scaleFactor = 1.0 - saturationZero / maximumSaturation
+    local denominator = saturationZero + maximumTriangular - maximumTriangular * scaleFactor * saturation
+    local valueLightness = 1.0 - saturation * saturationZero / denominator
+    local valueChroma = saturation * maximumTriangular * saturationZero / denominator
+    local lightness = value * valueLightness
+    local chroma = value * valueChroma
+    local correctedValueLightness = toeInverse(valueLightness)
+    local correctedValueChroma = valueChroma * correctedValueLightness / valueLightness
+    local correctedLightness = toeInverse(lightness)
+    chroma = chroma * correctedLightness / lightness
+    lightness = correctedLightness
+    local scaleRgb = oklabToLinearSrgb(
+        correctedValueLightness, aAxis * correctedValueChroma, bAxis * correctedValueChroma)
+    local lightnessScale = cubeRoot(1.0 / math.max(scaleRgb.r, scaleRgb.g, scaleRgb.b, 0.0))
+    lightness = lightness * lightnessScale
+    chroma = chroma * lightnessScale
+    local linear = oklabToLinearSrgb(lightness, chroma * aAxis, chroma * bAxis)
+    return srgbTransfer(linear.r), srgbTransfer(linear.g), srgbTransfer(linear.b)
+end
+
+local function srgbToOkhsv(red, green, blue)
+    local lab = linearSrgbToOklab(
+        srgbTransferInverse(red), srgbTransferInverse(green), srgbTransferInverse(blue))
+    local chroma = math.sqrt(lab.a * lab.a + lab.b * lab.b)
+    if chroma <= achromaticEpsilon then
+        return 0.0, 0.0, toe(lab.lightness)
+    end
+    local aAxis = lab.a / chroma
+    local bAxis = lab.b / chroma
+    local hue = mt.wrap(0.5 + 0.5 * math.atan(-lab.b, -lab.a) / math.pi, 0.0, 1.0)
+    local cusp = findCusp(aAxis, bAxis)
+    local maximumSaturation = cusp.chroma / cusp.lightness
+    local maximumTriangular = cusp.chroma / (1.0 - cusp.lightness)
+    local saturationZero = 0.5
+    local scaleFactor = 1.0 - saturationZero / maximumSaturation
+    local interpolation = maximumTriangular / (chroma + lab.lightness * maximumTriangular)
+    local valueLightness = interpolation * lab.lightness
+    local valueChroma = interpolation * chroma
+    local correctedValueLightness = toeInverse(valueLightness)
+    local correctedValueChroma = valueChroma * correctedValueLightness / valueLightness
+    local scaleRgb = oklabToLinearSrgb(
+        correctedValueLightness, aAxis * correctedValueChroma, bAxis * correctedValueChroma)
+    local lightnessScale = cubeRoot(1.0 / math.max(scaleRgb.r, scaleRgb.g, scaleRgb.b, 0.0))
+    local lightness = toe(lab.lightness / lightnessScale)
+    local adjustedChroma = chroma / lightnessScale
+    adjustedChroma = adjustedChroma * lightness / (lab.lightness / lightnessScale)
+    local value = lightness / valueLightness
+    local saturation = (saturationZero + maximumTriangular) * valueChroma /
+        (maximumTriangular * saturationZero + maximumTriangular * scaleFactor * valueChroma)
+    return hue, saturation, value
+end
+
+local function interpolateHue(fromHue, toHue, t)
+    local difference = toHue - fromHue
+    if difference > 0.5 then
+        difference = difference - 1.0
+    elseif difference < -0.5 then
+        difference = difference + 1.0
+    end
+    return mt.wrap(fromHue + difference * t, 0.0, 1.0)
+end
+
+local function interpolationHues(fromHue, fromChroma, toHue, toChroma)
+    if fromChroma <= achromaticEpsilon then
+        if toChroma <= achromaticEpsilon then
+            return 0.0, 0.0
+        end
+        return toHue, toHue
+    elseif toChroma <= achromaticEpsilon then
+        return fromHue, fromHue
+    end
+    return fromHue, toHue
+end
+
+---Create an RGBA color from OKLab components.
+---@param lightness number
+---@param aAxis number
+---@param bAxis number
+---@param alpha number|nil
+---@return MtColor
+function mt.color.from_oklab(lightness, aAxis, bAxis, alpha)
+    return oklabToColor(lightness, aAxis, bAxis, alpha)
+end
+
+---Convert an RGBA color to OKLab components.
+---@param color table
+---@return table
+function mt.color.to_oklab(color)
+    local lab = linearSrgbToOklab(
+        srgbTransferInverse(color.r), srgbTransferInverse(color.g), srgbTransferInverse(color.b))
+    lab.alpha = color.a == nil and 1.0 or color.a
+    return lab
+end
+
+---Create an RGBA color from OKLCH components.
+---@param lightness number
+---@param chroma number
+---@param hue number
+---@param alpha number|nil
+---@return MtColor
+function mt.color.from_oklch(lightness, chroma, hue, alpha)
+    local angle = mt.wrap(hue, 0.0, 1.0) * 2.0 * math.pi
+    return mt.color.from_oklab(lightness, chroma * math.cos(angle), chroma * math.sin(angle), alpha)
+end
+
+---Convert an RGBA color to OKLCH components.
+---@param color table
+---@return table
+function mt.color.to_oklch(color)
+    local lab = mt.color.to_oklab(color)
+    local chroma = math.sqrt(lab.a * lab.a + lab.b * lab.b)
+    local hue = 0.0
+    if chroma > achromaticEpsilon then
+        hue = mt.wrap(math.atan(lab.b, lab.a) / (2.0 * math.pi), 0.0, 1.0)
+    end
+    return { lightness = lab.lightness, chroma = chroma, hue = hue, alpha = lab.alpha }
+end
+
+---Create an RGBA color from OKHSV components.
+---@param hue number
+---@param saturation number
+---@param value number
+---@param alpha number|nil
+---@return MtColor
+function mt.color.from_okhsv(hue, saturation, value, alpha)
+    local red, green, blue = okhsvToSrgb(
+        mt.wrap(hue, 0.0, 1.0), mt.saturate(saturation), mt.saturate(value))
     return {
-        r = toSrgb(r_lin),
-        g = toSrgb(g_lin),
-        b = toSrgb(b_lin),
-        a = alpha or 1.0
+        r = mt.saturate(red),
+        g = mt.saturate(green),
+        b = mt.saturate(blue),
+        a = alpha == nil and 1.0 or alpha,
     }
+end
+
+---Convert an RGBA color to OKHSV components.
+---@param color table
+---@return table
+function mt.color.to_okhsv(color)
+    local hue, saturation, value = srgbToOkhsv(color.r, color.g, color.b)
+    return {
+        hue = hue,
+        saturation = saturation,
+        value = value,
+        alpha = color.a == nil and 1.0 or color.a,
+    }
+end
+
+---Create an RGBA color from OKHSL components.
+---@param hue number
+---@param saturation number
+---@param lightness number
+---@param alpha number|nil
+---@return MtColor
+function mt.color.from_okhsl(hue, saturation, lightness, alpha)
+    local red, green, blue = okhslToSrgb(
+        mt.wrap(hue, 0.0, 1.0), mt.saturate(saturation), mt.saturate(lightness))
+    return {
+        r = mt.saturate(red),
+        g = mt.saturate(green),
+        b = mt.saturate(blue),
+        a = alpha == nil and 1.0 or alpha,
+    }
+end
+
+---Convert an RGBA color to OKHSL components.
+---@param color table
+---@return table
+function mt.color.to_okhsl(color)
+    local hue, saturation, lightness = srgbToOkhsl(color.r, color.g, color.b)
+    return {
+        hue = hue,
+        saturation = saturation,
+        lightness = lightness,
+        alpha = color.a == nil and 1.0 or color.a,
+    }
+end
+
+---Interpolate colors in OKLab space.
+---@param from MtColor
+---@param to MtColor
+---@param t number
+---@return MtColor
+function mt.color.lerp_oklab(from, to, t)
+    local fromLab = mt.color.to_oklab(from)
+    local toLab = mt.color.to_oklab(to)
+    return mt.color.from_oklab(
+        mt.lerp(fromLab.lightness, toLab.lightness, t),
+        mt.lerp(fromLab.a, toLab.a, t),
+        mt.lerp(fromLab.b, toLab.b, t),
+        mt.lerp(fromLab.alpha, toLab.alpha, t))
+end
+
+---Interpolate colors in OKLCH space along the shortest hue path.
+---@param from MtColor
+---@param to MtColor
+---@param t number
+---@return MtColor
+function mt.color.lerp_oklch(from, to, t)
+    local fromLch = mt.color.to_oklch(from)
+    local toLch = mt.color.to_oklch(to)
+    local fromHue, toHue = interpolationHues(fromLch.hue, fromLch.chroma, toLch.hue, toLch.chroma)
+    return mt.color.from_oklch(
+        mt.lerp(fromLch.lightness, toLch.lightness, t),
+        mt.lerp(fromLch.chroma, toLch.chroma, t),
+        interpolateHue(fromHue, toHue, t),
+        mt.lerp(fromLch.alpha, toLch.alpha, t))
+end
+
+---Interpolate colors in OKHSV space along the shortest hue path.
+---@param from MtColor
+---@param to MtColor
+---@param t number
+---@return MtColor
+function mt.color.lerp_okhsv(from, to, t)
+    local fromHsv = mt.color.to_okhsv(from)
+    local toHsv = mt.color.to_okhsv(to)
+    local fromHue, toHue = interpolationHues(fromHsv.hue, fromHsv.saturation, toHsv.hue, toHsv.saturation)
+    return mt.color.from_okhsv(
+        interpolateHue(fromHue, toHue, t),
+        mt.lerp(fromHsv.saturation, toHsv.saturation, t),
+        mt.lerp(fromHsv.value, toHsv.value, t),
+        mt.lerp(fromHsv.alpha, toHsv.alpha, t))
+end
+
+---Interpolate colors in OKHSL space along the shortest hue path.
+---@param from MtColor
+---@param to MtColor
+---@param t number
+---@return MtColor
+function mt.color.lerp_okhsl(from, to, t)
+    local fromHsl = mt.color.to_okhsl(from)
+    local toHsl = mt.color.to_okhsl(to)
+    local fromHue, toHue = interpolationHues(fromHsl.hue, fromHsl.saturation, toHsl.hue, toHsl.saturation)
+    return mt.color.from_okhsl(
+        interpolateHue(fromHue, toHue, t),
+        mt.lerp(fromHsl.saturation, toHsl.saturation, t),
+        mt.lerp(fromHsl.lightness, toHsl.lightness, t),
+        mt.lerp(fromHsl.alpha, toHsl.alpha, t))
 end
 
 ---------------------------------------------------------------------------
