@@ -1803,6 +1803,11 @@ local function layoutMapPoint(matrix, x, y)
         matrix.b * x + matrix.d * y + matrix.ty
 end
 
+local function layoutMapVector(matrix, x, y)
+    return matrix.a * x + matrix.c * y,
+        matrix.b * x + matrix.d * y
+end
+
 local function layoutInverseMapVector(matrix, x, y)
     local determinant = matrix.a * matrix.d - matrix.b * matrix.c
     assert(math.abs(determinant) > 0.000000000001,
@@ -2438,6 +2443,178 @@ function mt.layout.place_2d(ctx, item, canvasX, canvasY)
     item.offset_x = offsetX
     item.offset_y = offsetY
     return offsetX, offsetY
+end
+
+---Copies the current pose of one character or part to another compatible item.
+---Position deltas are measured in untransformed ems and follow the source-local
+---rotation, scale, stretch, and parent hierarchy.
+---@param ctx table OnLayout context
+---@param destination table character or part to modify
+---@param source table character or part to read
+---@param options table|nil pose options
+function mt.layout.match_pose(ctx, destination, source, options)
+    assert(ctx and ctx.canvas and ctx.font and ctx.global and ctx.chars and ctx.parts,
+        "match_pose requires an OnLayout context")
+    assert(type(ctx.font.em_size) == "number" and ctx.font.em_size > 0.0,
+        "match_pose requires a positive ctx.font.em_size")
+    assert(type(destination) == "table" and destination.geometry,
+        "match_pose destination must be a character or part")
+    assert(type(source) == "table" and source.geometry,
+        "match_pose source must be a character or part")
+    assert(destination ~= source, "match_pose destination and source must be different items")
+
+    local destinationIsPart = destination.character_index ~= nil
+    local sourceIsPart = source.character_index ~= nil
+    local destinationIsCharacter = not destinationIsPart and destination.part_start ~= nil
+    local sourceIsCharacter = not sourceIsPart and source.part_start ~= nil
+    assert(destinationIsPart or destinationIsCharacter,
+        "match_pose destination must be a character or part")
+    assert(sourceIsPart or sourceIsCharacter, "match_pose source must be a character or part")
+    assert(destinationIsPart == sourceIsPart,
+        "match_pose destination and source must have the same item type")
+    if destinationIsPart then
+        assert(destination.character_index == source.character_index,
+            "match_pose parts must belong to the same character")
+    end
+
+    local currentOptions = options or {}
+    assert(type(currentOptions) == "table", "match_pose options must be a table or nil")
+    local allowedOptions = {
+        position = true,
+        position_delta_x = true,
+        position_delta_y = true,
+        rotation = true,
+        rotation_offset = true,
+        size = true,
+        size_scale_x = true,
+        size_scale_y = true,
+        depth = true,
+        z_offset = true,
+        yaw_offset = true,
+        pitch_offset = true,
+        opacity = true,
+        opacity_scale = true,
+    }
+    for optionName in pairs(currentOptions) do
+        assert(allowedOptions[optionName], "match_pose unknown option '" .. tostring(optionName) .. "'")
+    end
+
+    local function finiteOption(optionName, defaultValue)
+        local value = currentOptions[optionName]
+        if value == nil then
+            value = defaultValue
+        end
+        assert(type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge,
+            "match_pose " .. optionName .. " must be a finite number")
+        return value
+    end
+
+    local function booleanOption(optionName, defaultValue)
+        local value = currentOptions[optionName]
+        if value == nil then
+            value = defaultValue
+        end
+        assert(type(value) == "boolean", "match_pose " .. optionName .. " must be a boolean")
+        return value
+    end
+
+    local copyPosition = booleanOption("position", true)
+    local positionDeltaX = finiteOption("position_delta_x", 0.0)
+    local positionDeltaY = finiteOption("position_delta_y", 0.0)
+    local copyRotation = booleanOption("rotation", true)
+    local rotationOffset = finiteOption("rotation_offset", 0.0)
+    local sizeMode = currentOptions.size or "copy"
+    assert(sizeMode == "none" or sizeMode == "copy" or sizeMode == "match_bounds",
+        "match_pose size must be 'none', 'copy', or 'match_bounds'")
+    local sizeScaleX = finiteOption("size_scale_x", 1.0)
+    local sizeScaleY = finiteOption("size_scale_y", 1.0)
+    assert(sizeScaleX > 0.0 and sizeScaleY > 0.0,
+        "match_pose size_scale_x and size_scale_y must be positive")
+    local copyDepth = booleanOption("depth", true)
+    local zOffset = finiteOption("z_offset", 0.0)
+    local yawOffset = finiteOption("yaw_offset", 0.0)
+    local pitchOffset = finiteOption("pitch_offset", 0.0)
+    local copyOpacity = booleanOption("opacity", false)
+    local opacityScale = finiteOption("opacity_scale", 1.0)
+    assert(opacityScale >= 0.0, "match_pose opacity_scale must be non-negative")
+
+    if sizeMode == "copy" then
+        destination.scale = source.scale
+        destination.stretch_x = source.stretch_x * sizeScaleX
+        destination.stretch_y = source.stretch_y * sizeScaleY
+    elseif sizeMode == "match_bounds" then
+        local kBoundsEpsilon = 0.000000000001
+        local sourceWidth = source.geometry.bounds_width
+        local sourceHeight = source.geometry.bounds_height
+        local destinationWidth = destination.geometry.bounds_width
+        local destinationHeight = destination.geometry.bounds_height
+        local emHeight = ctx.font.em_size
+        local emWidth = emHeight * ctx.canvas.height / ctx.canvas.width
+        if math.abs(sourceWidth) <= kBoundsEpsilon then
+            local horizontalAdvance = source.geometry.advance_x
+            if not sourceIsPart and not ctx.global.vertical
+                and math.abs(horizontalAdvance) > kBoundsEpsilon then
+                sourceWidth = math.abs(horizontalAdvance)
+            else
+                sourceWidth = emWidth
+            end
+        end
+        if math.abs(sourceHeight) <= kBoundsEpsilon then
+            local verticalAdvance = source.geometry.advance_y
+            if not sourceIsPart and ctx.global.vertical
+                and math.abs(verticalAdvance) > kBoundsEpsilon then
+                sourceHeight = math.abs(verticalAdvance)
+            else
+                sourceHeight = emHeight
+            end
+        end
+        local destinationScale = destination.scale
+        local destinationStretchX = destination.stretch_x
+        local destinationStretchY = destination.stretch_y
+        destination.scale = source.scale
+        if math.abs(destinationWidth) > kBoundsEpsilon then
+            destination.stretch_x = source.stretch_x * sourceWidth / destinationWidth * sizeScaleX
+        elseif math.abs(destination.scale) > kBoundsEpsilon then
+            destination.stretch_x = destinationScale * destinationStretchX / destination.scale
+        else
+            destination.stretch_x = destinationStretchX
+        end
+        if math.abs(destinationHeight) > kBoundsEpsilon then
+            destination.stretch_y = source.stretch_y * sourceHeight / destinationHeight * sizeScaleY
+        elseif math.abs(destination.scale) > kBoundsEpsilon then
+            destination.stretch_y = destinationScale * destinationStretchY / destination.scale
+        else
+            destination.stretch_y = destinationStretchY
+        end
+    end
+    if copyRotation then
+        destination.rotation = source.rotation + rotationOffset
+    end
+    if copyDepth then
+        destination.z = source.z + zOffset
+        destination.yaw = source.yaw + yawOffset
+        destination.pitch = source.pitch + pitchOffset
+    end
+    if copyOpacity then
+        destination.opacity = mt.clamp(source.opacity * opacityScale, 0.0, 1.0)
+    end
+    if copyPosition then
+        local sourceX, sourceY = mt.layout.get_canvas_position_2d(ctx, source)
+        local sourceMatrix
+        if sourceIsPart then
+            sourceMatrix = layoutFullPartMatrix(ctx, source)
+        else
+            sourceMatrix = layoutFullCharacterMatrix(ctx, source)
+        end
+        local emSizePixels = ctx.font.em_size * ctx.canvas.height
+        local deltaPixelX, deltaPixelY = layoutMapVector(
+            sourceMatrix,
+            positionDeltaX * emSizePixels,
+            -positionDeltaY * emSizePixels)
+        mt.layout.place_2d(ctx, destination,
+            sourceX + deltaPixelX / ctx.canvas.width,
+            sourceY - deltaPixelY / ctx.canvas.height)
+    end
 end
 
 local function layoutExtendBounds(bounds, matrix, centerX, centerY, width, height)

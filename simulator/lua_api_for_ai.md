@@ -2,7 +2,7 @@
      Prose sections come from scripting/ai-preamble.md; reference tables come from
      scripting/api-schema.json. Edit those sources instead. -->
 
-Target API level: **8**. Lua 5.4 for the Mug Typography plugin. Complete contract
+Target API level: **9**. Lua 5.4 for the Mug Typography plugin. Complete contract
 for `ctx`: every field, unit, direction, reference point. Read section 1 first —
 most failures are units, direction or reference point, not syntax.
 
@@ -133,18 +133,17 @@ the Inspector later.
 
 All four are optional. Undefined callbacks are skipped.
 
-```text
-Script load
-  └─ OnInitialize(ctx)      once, legacy only — do not define in new scripts
+Once at script load: `OnInitialize(ctx)` — legacy only, do not define it in new
+scripts.
 
-Every frame
-  └─ OnPreLayout(ctx)       before layout is generated
-       ↓  layout generation (character and part counts become final)
-     OnLayout(ctx)          adjust generated characters and parts
-       ↓
-     OnPath(ctx)            replace or rebuild part outlines
-       ↓  render
-```
+Then, in this order every frame:
+
+1. `OnPreLayout(ctx)` — runs before layout is generated.
+2. *Layout generation.* Character and part counts become final here, which is why
+   `ctx.char_count` is undefined in `OnPreLayout`.
+3. `OnLayout(ctx)` — adjust the generated characters and parts.
+4. `OnPath(ctx)` — replace or rebuild part outlines.
+5. *Render.*
 
 | Callback | Writable targets | On error |
 |---|---|---|
@@ -359,11 +358,11 @@ sRGB component interpolation is intentional or only alpha varies;
 
 `use` selects *which* value is used; it does not toggle visibility.
 
-```text
-Global finalized in OnPreLayout
-  ↓  character: fill/stroke/shadow use == true ? character value : global value
-  ↓  part:      fill/stroke/shadow use == true ? part value      : value chosen above
-```
+`fill` / `stroke` / `shadow` resolve in three steps:
+
+1. The global value is finalized in `OnPreLayout`.
+2. Character level: `use == true` takes the character value, otherwise the global value.
+3. Part level: `use == true` takes the part value, otherwise the value chosen in step 2.
 
 Then opacity multiplies: `global.opacity * character.opacity * part.opacity`.
 
@@ -448,14 +447,32 @@ number, `!` = exclude, comma separates conditions, ranges like `c3-5` / `p8-10`
 are supported. Retrieving the same part twice returns the same mutable object
 within a frame.
 
-### Path coordinates are Y-DOWN
+### Shape drawing is Y-DOWN; shape placement is Y-UP
 
-This is the one place the API inverts. Path-editing coordinates are **Y-down**,
-part-center origin, 1000 units = 1 em, independent of canvas resolution —
-unlike every other Y in this API, which is Y-up.
+Path-editing coordinates are **Y-down**, with the part center as the origin and
+1000 units = 1 em, independent of canvas resolution. Drawing-space fill offsets
+are Y-down as well. Position, offset, pivot, geometry bounds/origins/advances,
+and custom-glyph bounds/advances remain **Y-up**. In short: coordinates that draw
+a shape are Y-down; coordinates and metrics that place a shape are Y-up.
 
 `ctx.paths` is rebuilt every frame, so apply path edits every frame; parts left
 untouched keep their original glyph outline.
+
+### Custom glyphs and the alignment box
+
+`ctx.glyphs:declare` puts the declared `bounds` into the box `h_align` / `v_align`
+align against, so decoration markers appended to the text drag the line away from
+its alignment edge. Declare `bounds = {0, 0, 0, 0}` for a glyph that draws but does
+not measure; it is then excluded from that box. Alignment reads bounds, not
+advance, so a negative `margins` entry cannot fix the drift.
+
+### Glyph-less characters report their font cell
+
+Spaces have no outline, so `geometry.bounds_*` reports the font-defined cell
+instead of a collapsed box: the character's own advance along the flow axis, and
+the cell height (horizontal) or column width (vertical) across it. A space's
+`bounds_center_*` therefore lines up with its neighbors, and positioning against
+`bounds_center_*` or `mt.layout.match_pose` needs no special case for spaces.
 
 ### `ctx.global.margins`
 
@@ -711,712 +728,746 @@ were not given.
 ## 12. ctx reference
 
 Format: `path : type [R:readable phases  W:writable phases]`, then unit metadata,
-then description. Phases are `init` / `pre` / `layout` / `path`. Indices are 1-based.
+then description. Phases are `init` / `pre` / `layout` / `path`, and `all` is all four.
+Indices are 1-based.
 
 ### ctx
 
 ```text
 ctx.time : number [R:pre,layout,path read-only]
-    unit=seconds
-    Current clip-local time in seconds (0 at the clip head).
+ unit=seconds
+ Current clip-local time in seconds (0 at the clip head).
 ctx.frame : number [R:pre,layout,path read-only]
-    unit=frames
-    Current clip-local frame number (0 at the clip head). May include subframes.
+ unit=frames
+ Current clip-local frame number (0 at the clip head). May include subframes.
 ctx.fps : number [R:pre,layout,path read-only]
-    unit=fps
-    Frames per second.
+ unit=fps
+ Frames per second.
 ctx.text : string [R:pre,layout read-only]
-    Deprecated and scheduled for removal. Use ctx.global.text to read or rewrite the current text. DEPRECATED.
+ Deprecated and scheduled for removal. Use ctx.global.text to read or rewrite the current text. DEPRECATED.
 ctx.char_count : integer [R:layout,path read-only]
-    Number of active characters after layout generation.
+ Number of active characters after layout generation.
 ctx.part_count : integer [R:layout,path read-only]
-    Number of active parts after layout generation.
-ctx.canvas : MtCanvas [R:init,pre,layout,path read-only]
-    Canvas dimensions.
-ctx.fonts : string[] [R:init,pre,layout,path read-only]
-    Available font names accepted by layout.font_name, indexed from 1.
+ Number of active parts after layout generation.
+ctx.canvas : MtCanvas [R:all read-only]
+ Canvas dimensions.
+ctx.fonts : string[] [R:all read-only]
+ Available font names accepted by layout.font_name, indexed from 1.
 ctx.timeline : MtTimeline [R:pre,layout,path read-only]
-    Host clip timing information.
+ Host clip timing information.
 ctx.font : MtFontMetrics [R:layout,path read-only]
-    Resolved font metrics in normalized canvas coordinates.
-ctx.meta : MtMeta [R:init,pre,layout,path read-only]
-    Read-only API, plugin, and capability metadata.
-ctx.inputs : MtScriptInputs [R:init,pre,layout,path read-only]
-    Fixed Inspector input arrays.
+ Resolved font metrics in normalized canvas coordinates.
+ctx.meta : MtMeta [R:all read-only]
+ Read-only API, plugin, and capability metadata.
+ctx.inputs : MtScriptInputs [R:all read-only]
+ Fixed Inspector input arrays.
 ctx.global : MtGlobal [R:pre,layout,path read-only]
-    Writable base global parameters.
+ Writable base global parameters.
 ctx.camera : MtCamera [R:pre,layout,path read-only]
-    Writable base 3D camera parameters.
+ Writable base 3D camera parameters.
 ctx.chars : MtCharacter[] [R:layout,path read-only]
-    Resolved characters, indexed from 1.
+ Resolved characters, indexed from 1.
 ctx.parts : MtPart[] [R:layout,path read-only]
-    Resolved parts, indexed from 1.
+ Resolved parts, indexed from 1.
 ctx.paths : MtPathCollection [R:path read-only]
-    Lazy selector for normalized drawing paths available in OnPath.
+ Lazy selector for normalized drawing paths available in OnPath.
+ctx.glyphs : MtGlyphDeclarations [R:pre read-only]
+ Custom glyph declarations accepted before shaping and layout.
 ctx.bounding_box : MtBoundingBox [R:layout,path read-only]
-    Writable bounding-box drawing parameters.
+ Writable bounding-box drawing parameters.
 ctx.output : MtOutput [R:layout,path read-only]
-    Writable output filtering and ordering parameters.
+ Writable output filtering and ordering parameters.
 ```
 
 ### ctx.canvas
 
 ```text
-ctx.canvas.width : number [R:init,pre,layout,path read-only]
-    unit=px  base=canvas width
-    Canvas width in pixels.
-ctx.canvas.height : number [R:init,pre,layout,path read-only]
-    unit=px  base=canvas height
-    Canvas height in pixels.
-ctx.canvas.aspect_ratio : number [R:init,pre,layout,path read-only]
-    unit=ratio  base=width / height
-    Canvas width divided by height.
-ctx.canvas.pixel_aspect_ratio : number [R:init,pre,layout,path read-only]
-    unit=ratio  base=pixel width / pixel height
-    Host project pixel aspect ratio.
+ctx.canvas.width : number [R:all read-only]
+ unit=px  base=canvas width
+ Canvas width in pixels.
+ctx.canvas.height : number [R:all read-only]
+ unit=px  base=canvas height
+ Canvas height in pixels.
+ctx.canvas.aspect_ratio : number [R:all read-only]
+ unit=ratio  base=width / height
+ Canvas width divided by height.
+ctx.canvas.pixel_aspect_ratio : number [R:all read-only]
+ unit=ratio  base=pixel width / pixel height
+ Host project pixel aspect ratio.
 ```
 
 ### ctx.timeline
 
 ```text
 ctx.timeline.available : boolean [R:pre,layout,path read-only]
-    Whether the host supplied a finite clip range.
+ Whether the host supplied a finite clip range.
 ctx.timeline.start_frame : number [R:pre,layout,path read-only]
-    unit=frames
-    First frame of the clip range in clip-local time (always 0 while available).
+ unit=frames
+ First frame of the clip range in clip-local time (always 0 while available).
 ctx.timeline.end_frame : number [R:pre,layout,path read-only]
-    unit=frames
-    Last frame of the clip range in clip-local time (equals duration_frames).
+ unit=frames
+ Last frame of the clip range in clip-local time (equals duration_frames).
 ctx.timeline.duration_frames : number [R:pre,layout,path read-only]
-    unit=frames
-    Clip range length measured from start_frame to end_frame.
+ unit=frames
+ Clip range length measured from start_frame to end_frame.
 ctx.timeline.duration_seconds : number [R:pre,layout,path read-only]
-    unit=seconds
-    Clip range length in seconds.
+ unit=seconds
+ Clip range length in seconds.
 ctx.timeline.progress : number [R:pre,layout,path read-only]
-    unit=unit_interval
-    Current normalized progress through the clip range, clamped to 0 through 1.
+ unit=unit_interval
+ Current normalized progress through the clip range, clamped to 0 through 1.
 ```
 
 ### ctx.font
 
 ```text
+ctx.font.em_size : number [R:layout,path read-only]
+ unit=canvas_ratio_length  base=canvas height (1.0 em)
+ One untransformed em normalized by canvas height.
 ctx.font.ascent : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas height
-    Font ascent normalized by canvas height.
+ unit=canvas_ratio_length  base=canvas height
+ Font ascent normalized by canvas height.
 ctx.font.descent : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas height
-    Positive font descent magnitude normalized by canvas height.
+ unit=canvas_ratio_length  base=canvas height
+ Positive font descent magnitude normalized by canvas height.
 ctx.font.line_height : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas height
-    Recommended font line height normalized by canvas height.
+ unit=canvas_ratio_length  base=canvas height
+ Recommended font line height normalized by canvas height.
 ctx.font.units_per_em : number [R:layout,path read-only]
-    unit=font_design_units  base=em square
-    Font design units per em.
+ unit=font_design_units  base=em square
+ Font design units per em.
 ```
 
 ### ctx.meta.capabilities
 
 ```text
-ctx.meta.capabilities.has_3d : boolean [R:init,pre,layout,path read-only]
-    Whether 3D projection parameters affect Native rendering.
+ctx.meta.capabilities.has_3d : boolean [R:all read-only]
+ Whether 3D projection parameters affect Native rendering.
 ```
 
 ### ctx.meta
 
 ```text
-ctx.meta.api_level : integer [R:init,pre,layout,path read-only]
-    Mug Typography Lua API compatibility level.
-ctx.meta.plugin_version : string [R:init,pre,layout,path read-only]
-    Plugin version for diagnostics and display.
-ctx.meta.capabilities : MtCapabilities [R:init,pre,layout,path read-only]
-    Native preset feature availability.
-ctx.meta.limits : MtLimits [R:init,pre,layout,path read-only]
-    Maximum character and part capacities for this instance.
-ctx.meta.instance_seed : integer [R:init,pre,layout,path read-only]
-    Stable per-instance random seed, distinct across instances of the same script and constant for the lifetime of one instance. Use it with mt.random/mt.random_range instead of a fixed literal seed so per-character variance differs across instances instead of repeating the same pattern.
+ctx.meta.api_level : integer [R:all read-only]
+ Mug Typography Lua API compatibility level.
+ctx.meta.plugin_version : string [R:all read-only]
+ Plugin version for diagnostics and display.
+ctx.meta.capabilities : MtCapabilities [R:all read-only]
+ Native preset feature availability.
+ctx.meta.limits : MtLimits [R:all read-only]
+ Maximum character and part capacities for this instance.
+ctx.meta.instance_seed : integer [R:all read-only]
+ Stable per-instance random seed, distinct across instances of the same script and constant for the lifetime of one instance. Use it with mt.random/mt.random_range instead of a fixed literal seed so per-character variance differs across instances instead of repeating the same pattern.
 ```
 
 ### ctx.meta.limits
 
 ```text
-ctx.meta.limits.max_characters : integer [R:init,pre,layout,path read-only]
-    Maximum number of characters this instance can lay out and expose to scripts.
-ctx.meta.limits.max_parts : integer [R:init,pre,layout,path read-only]
-    Maximum number of parts this instance can lay out and expose to scripts.
+ctx.meta.limits.max_characters : integer [R:all read-only]
+ Maximum number of characters this instance can lay out and expose to scripts.
+ctx.meta.limits.max_parts : integer [R:all read-only]
+ Maximum number of parts this instance can lay out and expose to scripts.
 ```
 
 ### script_inputs
 
 ```text
-script_inputs.numbers : number[] [R:init,pre,layout,path read-only]
-    unit=unitless
-    Length 10; 1-based.
-script_inputs.colors : MtColor[] [R:init,pre,layout,path read-only]
-    Length 4; 1-based.
-script_inputs.texts : string[] [R:init,pre,layout,path read-only]
-    Length 2; 1-based.
+script_inputs.numbers : number[] [R:all read-only]
+ unit=unitless
+ Length 10; 1-based.
+script_inputs.colors : MtColor[] [R:all read-only]
+ Length 4; 1-based.
+script_inputs.texts : string[] [R:all read-only]
+ Length 2; 1-based.
 ```
 
 ### ctx.global
 
 ```text
 ctx.global.text : string [R:pre,layout,path W:pre]
-    Text to shape and lay out.
+ Text to shape and lay out.
 ctx.global.font_name : string [R:pre,layout,path W:pre]
-    Font family identity used for shaping.
+ Font family identity used for shaping.
 ctx.global.tracking : number [R:pre,layout,path W:pre]
-    unit=em  base=font size (1.0 = 1 em)
-    Additional character tracking.
+ unit=em  base=font size (1.0 = 1 em)
+ Additional character tracking.
 ctx.global.line_spacing : number [R:pre,layout,path W:pre]
-    unit=multiplier  neutral=1
-    Line spacing multiplier.
+ unit=multiplier  neutral=1
+ Line spacing multiplier.
 ctx.global.vertical : boolean [R:pre,layout,path W:pre]
-    Whether vertical writing is enabled.
+ Whether vertical writing is enabled.
 ctx.global.h_align : string [R:pre,layout,path W:pre]
-    values=left|center|right
-    Horizontal alignment.
+ values=left|center|right
+ Horizontal alignment.
 ctx.global.v_align : string [R:pre,layout,path W:pre]
-    values=top|center|bottom|baseline
-    Vertical alignment.
+ values=top|center|bottom|baseline
+ Vertical alignment.
 ctx.global.margins : number[] [R:pre,layout,path W:pre]
-    unit=em  base=font size (1.0 = 1 em)
-    Per-character margins.
+ unit=em  base=font size (1.0 = 1 em)
+ Per-character margins.
 ctx.global.position_x : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Global X position; 0.5 is the canvas center.
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Global X position; 0.5 is the canvas center.
 ctx.global.position_y : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Global Y position; 0.5 is the canvas center and values grow upward.
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Global Y position; 0.5 is the canvas center and values grow upward.
 ctx.global.rotation : number [R:pre,layout,path W:pre]
-    unit=degrees  neutral=0  axis=clockwise_positive
-    Global rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
+ unit=degrees  neutral=0  axis=clockwise_positive
+ Global rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
 ctx.global.yaw : number [R:pre,layout,path W:pre]
-    unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
-    Global yaw in degrees; used by the 3D preset.
+ unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
+ Global yaw in degrees; used by the 3D preset.
 ctx.global.pitch : number [R:pre,layout,path W:pre]
-    unit=degrees  neutral=0  axis=object_pitch  base=+ turns the top edge toward the viewer (-Z)
-    Global pitch in degrees; used by the 3D preset.
+ unit=degrees  neutral=0  axis=object_pitch  base=+ turns the top edge toward the viewer (-Z)
+ Global pitch in degrees; used by the 3D preset.
 ctx.global.scale : number [R:pre,layout,path W:pre]
-    unit=multiplier  neutral=1  range=0.0001..+inf
-    Uniform global scale.
+ unit=multiplier  neutral=1  range=0.0001..+inf
+ Uniform global scale.
 ctx.global.stretch_x : number [R:pre,layout,path W:pre]
-    unit=multiplier  neutral=1  base=horizontal
-    Horizontal global stretch.
+ unit=multiplier  neutral=1  base=horizontal
+ Horizontal global stretch.
 ctx.global.stretch_y : number [R:pre,layout,path W:pre]
-    unit=multiplier  neutral=1  base=vertical
-    Vertical global stretch.
+ unit=multiplier  neutral=1  base=vertical
+ Vertical global stretch.
 ctx.global.pivot_x : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_displacement  neutral=0.5  base=canvas width, measured from global.position
-    Global pivot X displacement from global position in canvas-normalized units; 0.5 means zero displacement.
+ unit=canvas_ratio_displacement  neutral=0.5  base=canvas width, measured from global.position
+ Global pivot X displacement from global position in canvas-normalized units; 0.5 means zero displacement.
 ctx.global.pivot_y : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height, measured from global.position
-    Global pivot Y displacement from global position in canvas-normalized units; 0.5 means zero displacement and values grow upward.
+ unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height, measured from global.position
+ Global pivot Y displacement from global position in canvas-normalized units; 0.5 means zero displacement and values grow upward.
 ctx.global.opacity : number [R:pre,layout,path W:pre]
-    unit=unit_interval  neutral=1
-    Overall opacity multiplier in the range 0 to 1 applied to everything the effect draws (fill, gradient, stroke, shadow, bounding box).
+ unit=unit_interval  neutral=1
+ Overall opacity multiplier in the range 0 to 1 applied to everything the effect draws (fill, gradient, stroke, shadow, bounding box).
 ctx.global.fill : MtGlobalFill [R:pre,layout,path W:pre]
-    Global fill color settings.
+ Global fill color settings.
 ctx.global.gradient : MtGradient [R:pre,layout,path W:pre]
-    Global gradient settings.
+ Global gradient settings.
 ctx.global.stroke : MtGlobalStroke [R:pre,layout,path W:pre]
-    Resolved global stroke settings.
+ Resolved global stroke settings.
 ctx.global.shadow : MtGlobalShadow [R:pre,layout,path W:pre]
-    Global shadow settings.
+ Global shadow settings.
 ```
 
 ### ctx.global.fill
 
 ```text
 ctx.global.fill.color : MtColor [R:pre,layout,path W:pre]
-    Global fill color.
+ Global fill color.
 ctx.global.fill.transparent : boolean [R:pre,layout,path W:pre]
-    Whether the fill is transparent while stroke and effects remain visible.
+ Whether the fill is transparent while stroke and effects remain visible.
 ```
 
 ### ctx.global.gradient
 
 ```text
 ctx.global.gradient.color_space : string [R:pre,layout,path W:pre]
-    values=none|okhsv|okhsl|oklab|linear_rgb|crayon
-    Gradient mode; none disables the gradient.
+ values=none|okhsv|okhsl|oklab|linear_rgb|crayon
+ Gradient mode; none disables the gradient.
 ctx.global.gradient.end_color : MtColor [R:pre,layout,path W:pre]
-    Gradient end color.
+ Gradient end color.
 ctx.global.gradient.midpoint : number [R:pre,layout,path W:pre]
-    unit=unit_interval
-    Gradient midpoint in the range 0 to 1.
+ unit=unit_interval
+ Gradient midpoint in the range 0 to 1.
 ctx.global.gradient.angle : number [R:pre,layout,path W:pre]
-    unit=degrees  neutral=0  axis=clockwise_positive  base=0 = left-to-right (+X)
-    Gradient angle in degrees; 0 runs left to right and positive rotates clockwise.
+ unit=degrees  neutral=0  axis=clockwise_positive  base=0 = left-to-right (+X)
+ Gradient angle in degrees; 0 runs left to right and positive rotates clockwise.
 ctx.global.gradient.start_position : number [R:pre,layout,path W:pre]
-    unit=gradient_position  base=transformed global bounding box; 0.0-1.0 is the standard range
-    Gradient start position relative to the transformed text BB.
+ unit=gradient_position  base=transformed global bounding box; 0.0-1.0 is the standard range
+ Gradient start position relative to the transformed text BB.
 ctx.global.gradient.end_position : number [R:pre,layout,path W:pre]
-    unit=gradient_position  base=transformed global bounding box; 0.0-1.0 is the standard range
-    Gradient end position relative to the transformed text BB.
+ unit=gradient_position  base=transformed global bounding box; 0.0-1.0 is the standard range
+ Gradient end position relative to the transformed text BB.
 ```
 
 ### ctx.global.stroke
 
 ```text
 ctx.global.stroke.width : number [R:pre,layout,path W:pre]
-    unit=em  base=font size (1.0 = 1 em)
-    Resolved global stroke width.
+ unit=em  base=font size (1.0 = 1 em)
+ Resolved global stroke width.
 ctx.global.stroke.gap : number [R:pre,layout,path W:pre]
-    unit=em  base=font size (1.0 = 1 em)
-    Resolved global fill-to-stroke gap.
+ unit=em  base=font size (1.0 = 1 em)
+ Resolved global fill-to-stroke gap.
 ctx.global.stroke.color : MtColor [R:pre,layout,path W:pre]
-    Resolved global stroke color.
+ Resolved global stroke color.
 ctx.global.stroke.outer_width : number [R:pre,layout,path W:pre]
-    unit=em  base=font size (1.0 = 1 em)
-    Outer stroke width; active only while the inner stroke width is positive.
+ unit=em  base=font size (1.0 = 1 em)
+ Outer stroke width; active only while the inner stroke width is positive.
 ctx.global.stroke.outer_color : MtColor [R:pre,layout,path W:pre]
-    Outer stroke color.
+ Outer stroke color.
 ctx.global.stroke.order : string [R:pre,layout,path W:pre]
-    values=fill_over_stroke|stroke_over_fill
-    Whether fill or stroke is drawn on top.
+ values=fill_over_stroke|stroke_over_fill
+ Whether fill or stroke is drawn on top.
 ctx.global.stroke.join : string [R:pre,layout,path W:pre]
-    values=miter_clip|round|bevel|miter_round|miter_bevel
-    Stroke corner join style.
+ values=miter_clip|round|bevel|miter_round|miter_bevel
+ Stroke corner join style.
 ctx.global.stroke.miter_limit : number [R:pre,layout,path W:pre]
-    unit=multiplier  neutral=1
-    Maximum length of sharp miter joins.
+ unit=multiplier  neutral=1
+ Maximum length of sharp miter joins.
 ```
 
 ### ctx.global.shadow
 
 ```text
 ctx.global.shadow.enabled : boolean [R:pre,layout,path W:pre]
-    Whether the global shadow pass is enabled.
+ Whether the global shadow pass is enabled.
 ctx.global.shadow.distance : number [R:pre,layout,path W:pre]
-    unit=canvas_short_side_percent  range=-inf..10  base=min(canvas.width, canvas.height); 1.0 = 1%
-    Global shadow distance, in percent of the canvas short side (1.0 = 1% of min(width, height)).
+ unit=canvas_short_side_percent  range=-inf..10  base=min(canvas.width, canvas.height); 1.0 = 1%
+ Global shadow distance, in percent of the canvas short side (1.0 = 1% of min(width, height)).
 ctx.global.shadow.angle : number [R:pre,layout,path W:pre]
-    unit=degrees  neutral=0  axis=clockwise_positive  base=0 = right (+X), 90 = straight DOWN
-    Global shadow angle in degrees; 0 casts the shadow to the right and positive rotates clockwise (90 = straight down).
+ unit=degrees  neutral=0  axis=clockwise_positive  base=0 = right (+X), 90 = straight DOWN
+ Global shadow angle in degrees; 0 casts the shadow to the right and positive rotates clockwise (90 = straight down).
 ctx.global.shadow.color : MtColor [R:pre,layout,path W:pre]
-    Resolved global shadow color.
+ Resolved global shadow color.
 ```
 
 ### ctx.camera
 
 ```text
 ctx.camera.target_x : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Camera target X in host-normalized coordinates.
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Camera target X in host-normalized coordinates.
 ctx.camera.target_y : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Camera target Y in host-normalized coordinates; values grow upward.
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Camera target Y in host-normalized coordinates; values grow upward.
 ctx.camera.yaw : number [R:pre,layout,path W:pre]
-    unit=degrees  neutral=0  axis=camera_orbit  base=+ orbits the camera to the RIGHT of the target (subject appears to turn left)
-    Camera orbit yaw in degrees.
+ unit=degrees  neutral=0  axis=camera_orbit  base=+ orbits the camera to the RIGHT of the target (subject appears to turn left)
+ Camera orbit yaw in degrees.
 ctx.camera.pitch : number [R:pre,layout,path W:pre]
-    unit=degrees  neutral=0  axis=camera_orbit  base=+ orbits the camera UP (looking down at the subject)
-    Camera orbit pitch in degrees.
+ unit=degrees  neutral=0  axis=camera_orbit  base=+ orbits the camera UP (looking down at the subject)
+ Camera orbit pitch in degrees.
 ctx.camera.perspective : number [R:pre,layout,path W:pre]
-    unit=perspective_strength  base=distancePx = f(perspective) * canvas.height; larger = camera closer
-    Perspective strength.
+ unit=perspective_strength  base=distancePx = f(perspective) * canvas.height; larger = camera closer
+ Perspective strength.
 ctx.camera.zoom : number [R:pre,layout,path W:pre]
-    unit=multiplier  neutral=1  range=0.001..+inf
-    Camera zoom multiplier.
+ unit=multiplier  neutral=1  range=0.001..+inf
+ Camera zoom multiplier.
 ctx.camera.lens_shift_x : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_length  neutral=0  base=canvas width
-    Horizontal lens shift as a canvas fraction.
+ unit=canvas_ratio_length  neutral=0  base=canvas width
+ Horizontal lens shift as a canvas fraction.
 ctx.camera.lens_shift_y : number [R:pre,layout,path W:pre]
-    unit=canvas_ratio_length  neutral=0  axis=y_up  base=canvas height
-    Vertical lens shift as a canvas fraction; values grow upward.
+ unit=canvas_ratio_length  neutral=0  axis=y_up  base=canvas height
+ Vertical lens shift as a canvas fraction; values grow upward.
 ```
 
 ### ctx.chars[i]
 
 ```text
 ctx.chars[i].index : integer [R:layout,path read-only]
-    One-based character index.
+ One-based character index.
 ctx.chars[i].text : string [R:layout,path read-only]
-    Text represented by this shaped character cluster.
+ Text represented by this shaped character cluster.
 ctx.chars[i].part_start : integer [R:layout,path read-only]
-    One-based global index of this character's first part.
+ One-based global index of this character's first part.
 ctx.chars[i].part_count : integer [R:layout,path read-only]
-    Number of parts belonging to this character.
+ Number of parts belonging to this character.
 ctx.chars[i].line_index : integer [R:layout,path read-only]
-    One-based source layout line index.
+ One-based source layout line index.
 ctx.chars[i].geometry : MtCharacterGeometry [R:layout,path read-only]
-    Read-only base character geometry before script transforms.
+ Read-only base character geometry before script transforms.
 ctx.chars[i].offset_x : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  base=canvas width
-    Character X offset; 0.5 is no displacement.
+ unit=canvas_ratio_displacement  neutral=0.5  base=canvas width
+ Character X offset; 0.5 is no displacement.
 ctx.chars[i].offset_y : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height
-    Character Y offset; 0.5 is no displacement and values grow upward.
+ unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height
+ Character Y offset; 0.5 is no displacement and values grow upward.
 ctx.chars[i].pivot_x : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  base=canvas width, measured from the character's natural bounds center
-    Character pivot X displacement from the character's natural bounds center, in canvas-normalized units; 0.5 means zero displacement.
+ unit=canvas_ratio_displacement  neutral=0.5  base=canvas width, measured from the character's natural bounds center
+ Character pivot X displacement from the character's natural bounds center, in canvas-normalized units; 0.5 means zero displacement.
 ctx.chars[i].pivot_y : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height, measured from the character's natural bounds center
-    Character pivot Y displacement from the character's natural bounds center, in canvas-normalized units; 0.5 means zero displacement and values grow upward.
+ unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height, measured from the character's natural bounds center
+ Character pivot Y displacement from the character's natural bounds center, in canvas-normalized units; 0.5 means zero displacement and values grow upward.
 ctx.chars[i].scale : number [R:layout,path W:layout]
-    unit=multiplier  neutral=1  range=0.001..+inf
-    Uniform character scale.
+ unit=multiplier  neutral=1  range=0.001..+inf
+ Uniform character scale.
 ctx.chars[i].stretch_x : number [R:layout,path W:layout]
-    unit=multiplier  neutral=1  base=horizontal
-    Horizontal character stretch.
+ unit=multiplier  neutral=1  base=horizontal
+ Horizontal character stretch.
 ctx.chars[i].stretch_y : number [R:layout,path W:layout]
-    unit=multiplier  neutral=1  base=vertical
-    Vertical character stretch.
+ unit=multiplier  neutral=1  base=vertical
+ Vertical character stretch.
 ctx.chars[i].rotation : number [R:layout,path W:layout]
-    unit=degrees  neutral=0  axis=clockwise_positive
-    Character rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
+ unit=degrees  neutral=0  axis=clockwise_positive
+ Character rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
 ctx.chars[i].z : number [R:layout,path W:layout]
-    unit=canvas_ratio_length  neutral=0  axis=z_into_screen  base=positive = deeper/away from camera
-    Character Z position.
+ unit=canvas_ratio_length  neutral=0  axis=z_into_screen  base=positive = deeper/away from camera
+ Character Z position.
 ctx.chars[i].yaw : number [R:layout,path W:layout]
-    unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
-    Character yaw in degrees.
+ unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
+ Character yaw in degrees.
 ctx.chars[i].pitch : number [R:layout,path W:layout]
-    unit=degrees  neutral=0  axis=object_pitch  base=+ turns the top edge toward the viewer (-Z)
-    Character pitch in degrees.
+ unit=degrees  neutral=0  axis=object_pitch  base=+ turns the top edge toward the viewer (-Z)
+ Character pitch in degrees.
 ctx.chars[i].opacity : number [R:layout,path W:layout]
-    unit=unit_interval  neutral=1
-    Character opacity multiplier in the range 0 to 1 applied to the resolved fill, gradient, stroke, and shadow.
+ unit=unit_interval  neutral=1
+ Character opacity multiplier in the range 0 to 1 applied to the resolved fill, gradient, stroke, and shadow.
 ctx.chars[i].fill : MtIndividualFill [R:layout,path W:layout]
-    Individual fill color override.
+ Individual fill color override.
 ctx.chars[i].stroke : MtIndividualStroke [R:layout,path W:layout]
-    Individual stroke override.
+ Individual stroke override.
 ctx.chars[i].shadow : MtIndividualShadow [R:layout,path W:layout]
-    Individual shadow color override.
+ Individual shadow color override.
 ```
 
 ### ctx.chars[i].fill / ctx.parts[i].fill
 
 ```text
 ctx.chars[i].fill / ctx.parts[i].fill.use : boolean [R:layout,path W:layout]
-    Whether the individual fill color is used instead of the inherited one.
+ Whether the individual fill color is used instead of the inherited one.
 ctx.chars[i].fill / ctx.parts[i].fill.color : MtColor [R:layout,path W:layout]
-    Raw individual fill color.
+ Raw individual fill color.
 ```
 
 ### ctx.chars[i].stroke / ctx.parts[i].stroke
 
 ```text
 ctx.chars[i].stroke / ctx.parts[i].stroke.use : boolean [R:layout,path W:layout]
-    Whether the individual stroke settings are used instead of the inherited ones.
+ Whether the individual stroke settings are used instead of the inherited ones.
 ctx.chars[i].stroke / ctx.parts[i].stroke.width : number [R:layout,path W:layout]
-    unit=em  base=font size (1.0 = 1 em)
-    Raw individual stroke width.
+ unit=em  base=font size (1.0 = 1 em)
+ Raw individual stroke width.
 ctx.chars[i].stroke / ctx.parts[i].stroke.gap : number [R:layout,path W:layout]
-    unit=em  base=font size (1.0 = 1 em)
-    Raw individual fill-to-stroke gap.
+ unit=em  base=font size (1.0 = 1 em)
+ Raw individual fill-to-stroke gap.
 ctx.chars[i].stroke / ctx.parts[i].stroke.color : MtColor [R:layout,path W:layout]
-    Raw individual stroke color.
+ Raw individual stroke color.
 ctx.chars[i].stroke / ctx.parts[i].stroke.outer_width : number [R:layout,path W:layout]
-    unit=em  base=font size (1.0 = 1 em)
-    Raw individual outer stroke width; active only while the inner stroke width is positive.
+ unit=em  base=font size (1.0 = 1 em)
+ Raw individual outer stroke width; active only while the inner stroke width is positive.
 ctx.chars[i].stroke / ctx.parts[i].stroke.outer_color : MtColor [R:layout,path W:layout]
-    Raw individual outer stroke color.
+ Raw individual outer stroke color.
 ```
 
 ### ctx.chars[i].shadow / ctx.parts[i].shadow
 
 ```text
 ctx.chars[i].shadow / ctx.parts[i].shadow.use : boolean [R:layout,path W:layout]
-    Whether the individual shadow color is used instead of the inherited one.
+ Whether the individual shadow color is used instead of the inherited one.
 ctx.chars[i].shadow / ctx.parts[i].shadow.color : MtColor [R:layout,path W:layout]
-    Raw individual shadow color.
+ Raw individual shadow color.
 ```
 
 ### ctx.parts[i]
 
 ```text
 ctx.parts[i].index : integer [R:layout,path read-only]
-    One-based global part index.
+ One-based global part index.
 ctx.parts[i].character_index : integer [R:layout,path read-only]
-    One-based index of the owning character.
+ One-based index of the owning character.
 ctx.parts[i].index_in_character : integer [R:layout,path read-only]
-    One-based part index within the owning character.
+ One-based part index within the owning character.
 ctx.parts[i].geometry : MtPartGeometry [R:layout,path read-only]
-    Read-only base part geometry before script transforms.
+ Read-only base part geometry before script transforms.
 ctx.parts[i].offset_x : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  base=canvas width
-    Part X offset; 0.5 is no displacement.
+ unit=canvas_ratio_displacement  neutral=0.5  base=canvas width
+ Part X offset; 0.5 is no displacement.
 ctx.parts[i].offset_y : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height
-    Part Y offset; 0.5 is no displacement and values grow upward.
+ unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height
+ Part Y offset; 0.5 is no displacement and values grow upward.
 ctx.parts[i].pivot_x : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  base=canvas width, measured from the part's natural position
-    Part pivot X displacement from the part's natural position, in canvas-normalized units; 0.5 means zero displacement.
+ unit=canvas_ratio_displacement  neutral=0.5  base=canvas width, measured from the part's natural position
+ Part pivot X displacement from the part's natural position, in canvas-normalized units; 0.5 means zero displacement.
 ctx.parts[i].pivot_y : number [R:layout,path W:layout]
-    unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height, measured from the part's natural position
-    Part pivot Y displacement from the part's natural position, in canvas-normalized units; 0.5 means zero displacement and values grow upward.
+ unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height, measured from the part's natural position
+ Part pivot Y displacement from the part's natural position, in canvas-normalized units; 0.5 means zero displacement and values grow upward.
 ctx.parts[i].scale : number [R:layout,path W:layout]
-    unit=multiplier  neutral=1  range=0.001..+inf
-    Uniform part scale.
+ unit=multiplier  neutral=1  range=0.001..+inf
+ Uniform part scale.
 ctx.parts[i].rotation : number [R:layout,path W:layout]
-    unit=degrees  neutral=0  axis=clockwise_positive
-    Part rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
+ unit=degrees  neutral=0  axis=clockwise_positive
+ Part rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
 ctx.parts[i].stretch_x : number [R:layout,path W:layout]
-    unit=multiplier  neutral=1  base=horizontal
-    Horizontal part stretch.
+ unit=multiplier  neutral=1  base=horizontal
+ Horizontal part stretch.
 ctx.parts[i].stretch_y : number [R:layout,path W:layout]
-    unit=multiplier  neutral=1  base=vertical
-    Vertical part stretch.
+ unit=multiplier  neutral=1  base=vertical
+ Vertical part stretch.
 ctx.parts[i].z : number [R:layout,path W:layout]
-    unit=canvas_ratio_length  neutral=0  axis=z_into_screen  base=positive = deeper/away from camera
-    Part Z position.
+ unit=canvas_ratio_length  neutral=0  axis=z_into_screen  base=positive = deeper/away from camera
+ Part Z position.
 ctx.parts[i].yaw : number [R:layout,path W:layout]
-    unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
-    Part yaw in degrees, applied at the part pivot inside the character's rotated space; script-only (no host parameter group backs it, unlike the character equivalent).
+ unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
+ Part yaw in degrees, applied at the part pivot inside the character's rotated space; script-only (no host parameter group backs it, unlike the character equivalent).
 ctx.parts[i].pitch : number [R:layout,path W:layout]
-    unit=degrees  neutral=0  axis=object_pitch  base=+ turns the top edge toward the viewer (-Z)
-    Part pitch in degrees, applied at the part pivot inside the character's rotated space; script-only (no host parameter group backs it, unlike the character equivalent).
+ unit=degrees  neutral=0  axis=object_pitch  base=+ turns the top edge toward the viewer (-Z)
+ Part pitch in degrees, applied at the part pivot inside the character's rotated space; script-only (no host parameter group backs it, unlike the character equivalent).
 ctx.parts[i].opacity : number [R:layout,path W:layout]
-    unit=unit_interval  neutral=1
-    Part opacity multiplier in the range 0 to 1, combined with the owning character's opacity.
+ unit=unit_interval  neutral=1
+ Part opacity multiplier in the range 0 to 1, combined with the owning character's opacity.
 ctx.parts[i].fill : MtIndividualFill [R:layout,path W:layout]
-    Individual fill color override.
+ Individual fill color override.
 ctx.parts[i].stroke : MtIndividualStroke [R:layout,path W:layout]
-    Individual stroke override; script-only (no host parameter group backs it, unlike the character equivalent), so it always reads as unused/default unless a script sets it.
+ Individual stroke override; script-only (no host parameter group backs it, unlike the character equivalent), so it always reads as unused/default unless a script sets it.
 ctx.parts[i].shadow : MtIndividualShadow [R:layout,path W:layout]
-    Individual shadow color override; script-only (no host parameter group backs it, unlike the character equivalent), so it always reads as unused/default unless a script sets it.
+ Individual shadow color override; script-only (no host parameter group backs it, unlike the character equivalent), so it always reads as unused/default unless a script sets it.
 ```
 
 ### ctx.chars[i].geometry
 
 ```text
 ctx.chars[i].geometry.canvas_origin_x : number [R:layout,path read-only]
-    unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Character placement origin X in normalized canvas coordinates.
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Character placement origin X in normalized canvas coordinates.
 ctx.chars[i].geometry.canvas_origin_y : number [R:layout,path read-only]
-    unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Character placement origin Y in normalized canvas coordinates.
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Character placement origin Y in normalized canvas coordinates.
 ctx.chars[i].geometry.vertical_origin_x : number [R:layout,path read-only]
-    unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Vertical-typesetting origin X (column axis) in normalized canvas coordinates.
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Vertical-typesetting origin X (column axis) in normalized canvas coordinates.
 ctx.chars[i].geometry.vertical_origin_y : number [R:layout,path read-only]
-    unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Vertical-typesetting origin Y (cell top) in normalized canvas coordinates.
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Vertical-typesetting origin Y (cell top) in normalized canvas coordinates.
 ctx.chars[i].geometry.bounds_center_x : number [R:layout,path read-only]
-    unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Base ink-bounds center X in normalized canvas coordinates.
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Base ink-bounds center X in normalized canvas coordinates.
 ctx.chars[i].geometry.bounds_center_y : number [R:layout,path read-only]
-    unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Base ink-bounds center Y in normalized canvas coordinates.
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Base ink-bounds center Y in normalized canvas coordinates.
 ctx.chars[i].geometry.bounds_width : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas width
-    Base ink-bounds width normalized by canvas width.
+ unit=canvas_ratio_length  base=canvas width
+ Base ink-bounds width normalized by canvas width.
 ctx.chars[i].geometry.bounds_height : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas height
-    Base ink-bounds height normalized by canvas height.
+ unit=canvas_ratio_length  base=canvas height
+ Base ink-bounds height normalized by canvas height.
 ctx.chars[i].geometry.advance_x : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas width
-    Base horizontal advance normalized by canvas width.
+ unit=canvas_ratio_length  base=canvas width
+ Base horizontal advance normalized by canvas width.
 ctx.chars[i].geometry.advance_y : number [R:layout,path read-only]
-    unit=canvas_ratio_length  axis=y_up  base=canvas height (downward advance is negative)
-    Base vertical advance normalized by canvas height, positive upward.
+ unit=canvas_ratio_length  axis=y_up  base=canvas height (downward advance is negative)
+ Base vertical advance normalized by canvas height, positive upward.
 ```
 
 ### ctx.parts[i].geometry
 
 ```text
 ctx.parts[i].geometry.local_center_x : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas width
-    Part center X relative to its character origin, normalized by canvas width.
+ unit=canvas_ratio_length  base=canvas width
+ Part center X relative to its character origin, normalized by canvas width.
 ctx.parts[i].geometry.local_center_y : number [R:layout,path read-only]
-    unit=canvas_ratio_length  axis=y_up  base=canvas height, measured from the character origin
-    Part center Y relative to its character origin, normalized by canvas height and positive upward.
+ unit=canvas_ratio_length  axis=y_up  base=canvas height, measured from the character origin
+ Part center Y relative to its character origin, normalized by canvas height and positive upward.
 ctx.parts[i].geometry.canvas_center_x : number [R:layout,path read-only]
-    unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Part center X in normalized canvas coordinates.
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Part center X in normalized canvas coordinates.
 ctx.parts[i].geometry.canvas_center_y : number [R:layout,path read-only]
-    unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Part center Y in normalized canvas coordinates.
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Part center Y in normalized canvas coordinates.
 ctx.parts[i].geometry.bounds_center_x : number [R:layout,path read-only]
-    unit=canvas_ratio_position  base=canvas width (0.5 = center)
-    Part ink-bounds center X in normalized canvas coordinates.
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Part ink-bounds center X in normalized canvas coordinates.
 ctx.parts[i].geometry.bounds_center_y : number [R:layout,path read-only]
-    unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
-    Part ink-bounds center Y in normalized canvas coordinates.
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Part ink-bounds center Y in normalized canvas coordinates.
 ctx.parts[i].geometry.bounds_width : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas width
-    Part ink-bounds width normalized by canvas width.
+ unit=canvas_ratio_length  base=canvas width
+ Part ink-bounds width normalized by canvas width.
 ctx.parts[i].geometry.bounds_height : number [R:layout,path read-only]
-    unit=canvas_ratio_length  base=canvas height
-    Part ink-bounds height normalized by canvas height.
+ unit=canvas_ratio_length  base=canvas height
+ Part ink-bounds height normalized by canvas height.
 ```
 
 ### ctx.bounding_box
 
 ```text
 ctx.bounding_box.enabled : boolean [R:layout,path W:layout]
-    Whether the bounding box is drawn.
+ Whether the bounding box is drawn.
 ctx.bounding_box.draw_top : boolean [R:layout,path W:layout]
-    Whether the top edge is drawn.
+ Whether the top edge is drawn.
 ctx.bounding_box.draw_bottom : boolean [R:layout,path W:layout]
-    Whether the bottom edge is drawn.
+ Whether the bottom edge is drawn.
 ctx.bounding_box.draw_left : boolean [R:layout,path W:layout]
-    Whether the left edge is drawn.
+ Whether the left edge is drawn.
 ctx.bounding_box.draw_right : boolean [R:layout,path W:layout]
-    Whether the right edge is drawn.
+ Whether the right edge is drawn.
 ctx.bounding_box.color : MtColor [R:layout,path W:layout]
-    Bounding-box stroke color.
+ Bounding-box stroke color.
 ctx.bounding_box.width : number [R:layout,path W:layout]
-    unit=font_size_percent  base=100.0 = one font size
-    Bounding-box stroke width.
+ unit=font_size_percent  base=100.0 = one font size
+ Bounding-box stroke width.
 ctx.bounding_box.fill_enabled : boolean [R:layout,path W:layout]
-    Whether the bounding box background is filled.
+ Whether the bounding box background is filled.
 ctx.bounding_box.fill_color : MtColor [R:layout,path W:layout]
-    Bounding-box fill color.
+ Bounding-box fill color.
 ctx.bounding_box.fill_opacity : number [R:layout,path W:layout]
-    unit=unit_interval
-    Bounding-box fill opacity.
+ unit=unit_interval
+ Bounding-box fill opacity.
 ctx.bounding_box.start_cap : string [R:layout,path W:layout]
-    values=butt|square|round|round_rev|triangle|triangle_rev
-    Bounding-box stroke start cap.
+ values=butt|square|round|round_rev|triangle|triangle_rev
+ Bounding-box stroke start cap.
 ctx.bounding_box.end_cap : string [R:layout,path W:layout]
-    values=butt|square|round|round_rev|triangle|triangle_rev
-    Bounding-box stroke end cap.
+ values=butt|square|round|round_rev|triangle|triangle_rev
+ Bounding-box stroke end cap.
 ctx.bounding_box.margin_x : number [R:layout,path W:layout]
-    unit=font_size_percent  base=100.0 = one font size, horizontal
-    Horizontal bounding-box margin.
+ unit=font_size_percent  base=100.0 = one font size, horizontal
+ Horizontal bounding-box margin.
 ctx.bounding_box.margin_y : number [R:layout,path W:layout]
-    unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
-    Vertical bounding-box margin.
+ unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
+ Vertical bounding-box margin.
 ctx.bounding_box.corner_radius : number [R:layout,path W:layout]
-    unit=font_size_percent  base=100.0 = one font size
-    Bounding-box corner radius.
+ unit=font_size_percent  base=100.0 = one font size
+ Bounding-box corner radius.
 ctx.bounding_box.fill_offset_x : number [R:layout,path W:layout]
-    unit=font_size_percent  base=100.0 = one font size, horizontal
-    Horizontal fill offset.
+ unit=font_size_percent  base=100.0 = one font size, horizontal
+ Horizontal fill offset.
 ctx.bounding_box.fill_offset_y : number [R:layout,path W:layout]
-    unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
-    Vertical fill offset.
+ unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
+ Vertical fill offset.
 ctx.bounding_box.stroke_offset_x : number [R:layout,path W:layout]
-    unit=font_size_percent  base=100.0 = one font size, horizontal
-    Horizontal stroke offset.
+ unit=font_size_percent  base=100.0 = one font size, horizontal
+ Horizontal stroke offset.
 ctx.bounding_box.stroke_offset_y : number [R:layout,path W:layout]
-    unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
-    Vertical stroke offset.
+ unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
+ Vertical stroke offset.
 ```
 
 ### ctx.output
 
 ```text
 ctx.output.separation_enabled : boolean [R:layout,path read-only]
-    Read-only host output-separation state.
+ Read-only host output-separation state.
 ctx.output.render_mode : string [R:layout,path read-only]
-    values=default|separation_1|separation_2
-    Read-only host-selected separation output.
+ values=default|separation_1|separation_2
+ Read-only host-selected separation output.
 ctx.output.targets_1 : string [R:layout,path read-only]
-    Read-only host targets assigned to separation output 1.
+ Read-only host targets assigned to separation output 1.
 ctx.output.targets_2 : string [R:layout,path read-only]
-    Read-only host targets assigned to separation output 2.
+ Read-only host targets assigned to separation output 2.
 ctx.output.write_on_mode : string [R:layout,path W:layout]
-    values=character|part
-    Write-on unit.
+ values=character|part
+ Write-on unit.
 ctx.output.write_on_start : number [R:layout,path W:layout]
-    unit=unit_interval
-    Start of the normalized visible write-on range from 0 to 1.
+ unit=unit_interval
+ Start of the normalized visible write-on range from 0 to 1.
 ctx.output.write_on_end : number [R:layout,path W:layout]
-    unit=unit_interval
-    End of the normalized visible write-on range from 0 to 1.
+ unit=unit_interval
+ End of the normalized visible write-on range from 0 to 1.
 ctx.output.reorder_parts : boolean [R:layout,path W:layout]
-    Whether parts use writing-direction stroke order.
+ Whether parts use writing-direction stroke order.
 ctx.output.manual_order_enabled : boolean [R:layout,path W:layout]
-    Whether manual reveal and draw order is enabled.
+ Whether manual reveal and draw order is enabled.
 ctx.output.manual_order_text : string [R:layout,path W:layout]
-    Manual character and part order list.
+ Manual character and part order list.
 ctx.output.force_disable_3d_projection : boolean [R:layout,path W:layout]
-    Final per-frame override that disables 3D projection and ignores all Inspector and keyframed 3D settings. Set true only for an explicitly 2D-only script.
+ Final per-frame override that disables 3D projection and ignores all Inspector and keyframed 3D settings. Set true only for an explicitly 2D-only script.
 ```
 
 ### part
 
 ```text
 part.index : integer [R:path read-only]
-    One-based global part index.
+ One-based global part index.
 part.character_index : integer [R:path read-only]
-    One-based index of the owning character.
+ One-based index of the owning character.
 part.index_in_character : integer [R:path read-only]
-    One-based part index within the owning character.
+ One-based part index within the owning character.
 part.line_index : integer [R:path read-only]
-    One-based source layout line index.
+ One-based source layout line index.
 part.text : string [R:path read-only]
-    Text represented by the owning shaped character cluster.
+ Text represented by the owning shaped character cluster.
 part.path : MtDrawingPath [R:path read-only]
-    Mutable path initialized from the original glyph part and committed atomically after OnPath succeeds.
+ Mutable path initialized from the original glyph part and committed atomically after OnPath succeeds.
 ```
 
 ### each_info
 
 ```text
 each_info.progress : number [R:layout,path read-only]
-    unit=unit_interval
-    Normalized position within the filtered set, following the order option.
+ unit=unit_interval
+ Normalized position within the filtered set, following the order option.
 each_info.n : integer [R:layout,path read-only]
-    One-based counter within the filtered set. Differs from the yielded index whenever a filter is active.
+ One-based counter within the filtered set. Differs from the yielded index whenever a filter is active.
 each_info.count : integer [R:layout,path read-only]
-    Number of elements in the filtered set (at least 1).
+ Number of elements in the filtered set (at least 1).
 each_info.first : boolean [R:layout,path read-only]
-    True on the first iteration of the filtered set.
+ True on the first iteration of the filtered set.
 each_info.last : boolean [R:layout,path read-only]
-    True on the last iteration of the filtered set.
+ True on the last iteration of the filtered set.
 each_info.char : MtCharacter [R:layout,path read-only]
-    mt.each_part only: the character owning this part.
+ mt.each_part only: the character owning this part.
 each_info.char_index : integer [R:layout,path read-only]
-    mt.each_part only: one-based index of the owning character in ctx.chars.
+ mt.each_part only: one-based index of the owning character in ctx.chars.
 each_info.index_in_char : integer [R:layout,path read-only]
-    mt.each_part only: one-based part index within the owning character.
+ mt.each_part only: one-based part index within the owning character.
 ```
 
 ### ctx.paths
 
 ```text
 ctx.paths.units_per_em : number [R:path read-only]
-    unit=path_units  base=em (always 1000)
-    Normalized path coordinate scale. Always 1000 units per em.
+ unit=path_units  base=em (always 1000)
+ Normalized path coordinate scale. Always 1000 units per em.
 ctx.paths:part(index) -> MtPathPart|nil [R:path read-only]
-    Lazily get one part by its one-based global part index, or nil when absent.
+ Lazily get one part by its one-based global part index, or nil when absent.
 ctx.paths:character(index) -> MtPathPart[] [R:path read-only]
-    Lazily get every part owned by one one-based character index.
+ Lazily get every part owned by one one-based character index.
 ctx.paths:select(selector) -> MtPathPart[] [R:path read-only]
-    Lazily select parts with the character/part selector grammar, ordered by global part index.
+ Lazily select parts with the character/part selector grammar, ordered by global part index.
 ```
 
 ### MtDrawingPath
 
 ```text
 MtDrawingPath:clear() -> nil [R:path read-only]
-    Remove every command from this path.
+ Remove every command from this path.
 MtDrawingPath:assign(template) -> nil [R:path read-only]
-    Replace this path with a compiled mt.svg_path template.
+ Replace this path with a compiled mt.svg_path template.
 MtDrawingPath:set_svg(source) -> nil [R:path read-only]
-    Parse and replace this path from SVG path data in normalized 1000-units-per-em coordinates.
+ Parse and replace this path from SVG path data in normalized 1000-units-per-em coordinates.
 MtDrawingPath:move_to(x, y) -> nil [R:path read-only]
-    Start a subpath at an absolute normalized local coordinate.
+ Start a subpath at an absolute normalized local coordinate.
 MtDrawingPath:line_to(x, y) -> nil [R:path read-only]
-    Append a straight line to an absolute normalized local coordinate.
+ Append a straight line to an absolute normalized local coordinate.
 MtDrawingPath:quad_to(cx, cy, x, y) -> nil [R:path read-only]
-    Append a quadratic Bezier segment.
+ Append a quadratic Bezier segment.
 MtDrawingPath:cubic_to(cx1, cy1, cx2, cy2, x, y) -> nil [R:path read-only]
-    Append a cubic Bezier segment.
+ Append a cubic Bezier segment.
 MtDrawingPath:close() -> nil [R:path read-only]
-    Close the current subpath.
+ Close the current subpath.
+MtDrawingPath:bounds() -> number, number, number, number|nil [R:all read-only]
+ Return tight path bounds as minimum X, minimum Y, maximum X, and maximum Y; an empty path returns nil.
+MtDrawingPath:map_points(callback) -> nil [R:all read-only]
+ Atomically replace every anchor and control point with coordinates returned by a callback while preserving path topology.
+```
+
+### path_point
+
+```text
+path_point.index : integer [R:all read-only]
+ One-based point index across the path.
+path_point.command_index : integer [R:all read-only]
+ One-based logical command index.
+path_point.contour_index : integer [R:all read-only]
+ One-based contour index.
+path_point.role : string [R:all read-only]
+ values=anchor|control1|control2
+ Point role within the logical command.
+path_point.command : string [R:all read-only]
+ values=move|line|quad|cubic
+ Logical command containing this point.
+```
+
+### glyph_declarations
+
+```text
+glyph_declarations:declare(declaration) -> string [R:pre read-only]
+ Declare one custom glyph and return its placeholder; path uses Y-down drawing coordinates, while bounds and advances use Y-up layout coordinates.
 ```
 
 ### color value
 
 ```text
 color value.r : number [R:pre,layout,path W:pre,layout]
-    unit=unit_interval
-    Red channel in the range 0 to 1.
+ unit=unit_interval
+ Red channel in the range 0 to 1.
 color value.g : number [R:pre,layout,path W:pre,layout]
-    unit=unit_interval
-    Green channel in the range 0 to 1.
+ unit=unit_interval
+ Green channel in the range 0 to 1.
 color value.b : number [R:pre,layout,path W:pre,layout]
-    unit=unit_interval
-    Blue channel in the range 0 to 1.
+ unit=unit_interval
+ Blue channel in the range 0 to 1.
 color value.a : number [R:pre,layout,path W:pre,layout]
-    unit=unit_interval
-    Alpha channel in the range 0 to 1.
+ unit=unit_interval
+ Alpha channel in the range 0 to 1.
 ```
 
 ## 13. mt.* utility reference
@@ -1427,286 +1478,290 @@ All `mt.*` members are readable in every callback. Signatures list parameter nam
 
 ```text
 mt.storage : table
-    Deprecated frozen storage; the Lua state persists across frames, so hold values in a local at chunk scope instead. DEPRECATED.
+ Deprecated frozen storage; the Lua state persists across frames, so hold values in a local at chunk scope instead. DEPRECATED.
 mt.ease : MtEase
-    Easing function namespace.
+ Easing function namespace.
 mt.color : MtColorUtilities
-    Color construction and interpolation namespace.
+ Color construction and interpolation namespace.
 mt.layout : MtLayoutUtilities
-    Layout and typesetting helper namespace.
+ Layout and typesetting helper namespace.
 mt.path : MtPathUtilities
-    Closed-form motion path evaluation namespace.
+ Closed-form motion path evaluation namespace.
 mt.svg_path(source, optionsOrSourceUnitsPerEm?) -> MtDrawingPath
-    Compile SVG path data into an immutable normalized template. Accepts source units per em, or { view_box, em_scale } where em_scale 1.0 fits the view box to one em.
+ Compile SVG path data into an immutable normalized template. Accepts source units per em, or { view_box, em_scale } where em_scale 1.0 fits the view box to one em.
+mt.drawing_path() -> MtDrawingPath
+ Create an empty mutable drawing path in normalized 1000-units-per-em local coordinates.
 mt.timeline : MtTimelineUtilities
-    Timeline progress and interpolation namespace.
+ Timeline progress and interpolation namespace.
 mt.text : MtTextUtilities
-    UTF-8 safe text processing namespace.
+ UTF-8 safe text processing namespace.
 mt.CHAR : integer
-    Character kind flag for target and order entries; combine it with a one-based character index.
+ Character kind flag for target and order entries; combine it with a one-based character index.
 mt.PART : integer
-    Part kind flag for target and order entries; combine it with a one-based global part index.
+ Part kind flag for target and order entries; combine it with a one-based global part index.
 mt.NOT : integer
-    Exclusion flag reserved for target entries; mt.order_text rejects it.
+ Exclusion flag reserved for target entries; mt.order_text rejects it.
 mt.clamp(value, low, high) -> number
-    Clamp a value into a range.
+ Clamp a value into a range.
 mt.saturate(value) -> number
-    Clamp a value to the range 0 through 1.
+ Clamp a value to the range 0 through 1.
 mt.lerp(from, to, t) -> number
-    Linearly interpolate between two values.
+ Linearly interpolate between two values.
 mt.inverse_lerp(from, to, value) -> number
-    Return the interpolation factor of a value between two endpoints.
+ Return the interpolation factor of a value between two endpoints.
 mt.remap(value, inLow, inHigh, outLow, outHigh, clamped?) -> number
-    Map a value between ranges.
+ Map a value between ranges.
 mt.wrap(value, boundaryA, boundaryB) -> number
-    Wrap a value into the half-open interval between two boundaries, regardless of their order.
+ Wrap a value into the half-open interval between two boundaries, regardless of their order.
 mt.lerp_angle(from, to, t) -> number
-    Interpolate degrees along the shortest angular path.
+ Interpolate degrees along the shortest angular path.
 mt.distribute(index, count) -> number
-    Map a one-based index evenly across 0 through 1.
+ Map a one-based index evenly across 0 through 1.
 mt.order_text(entries) -> string
-    Convert encoded character and part indices into validated manual-order text while preserving input order.
+ Convert encoded character and part indices into validated manual-order text while preserving input order.
 mt.each_char(ctx, options?) -> function
-    Iterate shaped characters with optional filtering. Yields the ctx.chars index, the character, and a reusable info table with progress, n, count, first and last. Options: from, to (index range), line (line_index filter), order ('asc'|'desc'|'center'|'random') selecting how info.progress spans 0 through 1, seed for the random order. info is reused every iteration: copy values out to keep them.
+ Iterate shaped characters with optional filtering. Yields the ctx.chars index, the character, and a reusable info table with progress, n, count, first and last. Options: from, to (index range), line (line_index filter), order ('asc'|'desc'|'center'|'random') selecting how info.progress spans 0 through 1, seed for the random order. info is reused every iteration: copy values out to keep them.
 mt.each_part(ctx, options?) -> function
-    Iterate shaped parts with optional filtering. Yields the ctx.parts index, the part, and a reusable info table that also resolves char, char_index and index_in_char. Adds from_char and to_char, keeping only parts whose owning character index falls in that range; they intersect with from and to. info.progress spans the whole filtered set and does not restart on character boundaries.
+ Iterate shaped parts with optional filtering. Yields the ctx.parts index, the part, and a reusable info table that also resolves char, char_index and index_in_char. Adds from_char and to_char, keeping only parts whose owning character index falls in that range; they intersect with from and to. info.progress spans the whole filtered set and does not restart on character boundaries.
 mt.falloff(distance, radius) -> number
-    Smooth bell-shaped influence weight: 1 at the centre, easing toward 0 with distance.
+ Smooth bell-shaped influence weight: 1 at the centre, easing toward 0 with distance.
 mt.polar_offset(angleDegrees, radius) -> number, number
-    Deprecated screen-oriented polar vector, whose Y must be negated before it reaches offset_y; use polar_offset_2d. DEPRECATED.
+ Deprecated screen-oriented polar vector, whose Y must be negated before it reaches offset_y; use polar_offset_2d. DEPRECATED.
 mt.polar_offset_2d(angleDegrees, radius) -> number, number
-    Converts a polar direction (degrees) and radius into a Y-up canvas offset pair, ready to add to offset_x and offset_y.
+ Converts a polar direction (degrees) and radius into a Y-up canvas offset pair, ready to add to offset_x and offset_y.
 mt.smoothstep(edge0, edge1, value) -> number
-    Smooth Hermite transition across a range.
+ Smooth Hermite transition across a range.
 mt.cycle(t, period) -> number
-    Repeating 0 to 1 ramp.
+ Repeating 0 to 1 ramp.
 mt.pingpong(t, period) -> number
-    Repeating 0 to 1 to 0 motion.
+ Repeating 0 to 1 to 0 motion.
 mt.stagger(time, index, delay, duration) -> number
-    Per-index staggered progress in the range 0 to 1.
+ Per-index staggered progress in the range 0 to 1.
 mt.stagger_progress(progress, position, span) -> number
-    Spread an existing normalized progress across element positions while ensuring every element finishes at progress 1.
+ Spread an existing normalized progress across element positions while ensuring every element finishes at progress 1.
 mt.keyframes(keys, time) -> number|color
-    Closed-form piecewise keyframe interpolation over number or color keys with optional per-segment easing.
+ Closed-form piecewise keyframe interpolation over number or color keys with optional per-segment easing.
 mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?) -> number
-    Staggered progress with configurable directional patterns. 'random' assigns a duplicate-free shuffled rank, so delays stay evenly spaced.
+ Staggered progress with configurable directional patterns. 'random' assigns a duplicate-free shuffled rank, so delays stay evenly spaced.
 mt.random(seed, index, channel?) -> number
-    Stable order-independent random value with an optional named channel.
+ Stable order-independent random value with an optional named channel.
 mt.random_range(seed, index, low, high, channel?) -> number
-    Stable random value in a requested range with an optional named channel.
+ Stable random value in a requested range with an optional named channel.
 mt.distributed_random(seed, index, count, low, high, channel?) -> number
-    Assign one of count evenly spaced values in a stable seeded permutation.
+ Assign one of count evenly spaced values in a stable seeded permutation.
 mt.noise1(x, seed?) -> number
-    Deterministic smooth one-dimensional value noise.
+ Deterministic smooth one-dimensional value noise.
 mt.noise2(x, y, seed?) -> number
-    Deterministic smooth two-dimensional value noise.
+ Deterministic smooth two-dimensional value noise.
 mt.spring(t, frequency, damping) -> number
-    Damped oscillation from 1 toward 0 (may go negative while overshooting). Intended for residual displacement, not raw 0–1 progress.
+ Damped oscillation from 1 toward 0 (may go negative while overshooting). Intended for residual displacement, not raw 0–1 progress.
 mt.wave(t, frequency, phase?) -> number
-    Sine wave shorthand.
+ Sine wave shorthand.
 mt.wave_square(t, frequency, phase?) -> number
-    Square wave shorthand (returns -1.0 or 1.0).
+ Square wave shorthand (returns -1.0 or 1.0).
 mt.wave_triangle(t, frequency, phase?) -> number
-    Triangle wave shorthand.
+ Triangle wave shorthand.
 mt.wave_sawtooth(t, frequency, phase?) -> number
-    Sawtooth wave shorthand.
+ Sawtooth wave shorthand.
 mt.wiggle(time, frequency, amplitude, octaves?, seed?) -> number
-    Deterministic layered value-noise wiggle; amplitude is the first octave's amplitude, not the summed maximum.
+ Deterministic layered value-noise wiggle; amplitude is the first octave's amplitude, not the summed maximum.
 mt.bounce_y(paramsOrT, groundY, startY, gravity, restitution, startVelocity, squashStrength, stretchStrength, flexibility, damping) -> table|number
-    Closed-form 1D ballistic bounce calculation against a ground plane with continuous Squash & Stretch.
+ Closed-form 1D ballistic bounce calculation against a ground plane with continuous Squash & Stretch.
 mt.bounce_x(paramsOrT, wallX, startX, acceleration, restitution, startVelocity, squashStrength, stretchStrength, flexibility, damping) -> table|number
-    Closed-form 1D ballistic bounce calculation against a vertical wall plane with continuous Squash & Stretch.
+ Closed-form 1D ballistic bounce calculation against a vertical wall plane with continuous Squash & Stretch.
 mt.bounce_ground(ctx, item, groundY, config?) -> table
-    Convenience API: Bounces a character or part item against a ground Canvas plane, automatically computing and applying offset_y, stretch_x, and stretch_y.
+ Convenience API: Bounces a character or part item against a ground Canvas plane, automatically computing and applying offset_y, stretch_x, and stretch_y.
 mt.bounce_wall(ctx, item, wallX, config?) -> table
-    Convenience API: Bounces a character or part item against a vertical wall Canvas plane, automatically computing and applying offset_x, stretch_x, and stretch_y.
+ Convenience API: Bounces a character or part item against a vertical wall Canvas plane, automatically computing and applying offset_x, stretch_x, and stretch_y.
 mt.impact_squash(params) -> number, number, number
-    Closed-form squash-and-stretch impulse for collision events.
+ Closed-form squash-and-stretch impulse for collision events.
 mt.projectile_2d(paramsOrT, speed, angleDegrees, gravity, spin, drag) -> table|number
-    Closed-form 2D ballistic flight from a launch velocity under gravity, with optional spin and drag.
+ Closed-form 2D ballistic flight from a launch velocity under gravity, with optional spin and drag.
 mt.friction_decay(t, speed, friction) -> number, number
-    Closed-form exponential deceleration: distance travelled and remaining speed under friction.
+ Closed-form exponential deceleration: distance travelled and remaining speed under friction.
 ```
 
 ### mt.color.*
 
 ```text
 mt.color.resolve_fill(ctx, target) -> MtColor, string, number
-    Resolve the fill color, mode and object opacity inherited by a character or part.
+ Resolve the fill color, mode and object opacity inherited by a character or part.
 mt.color.lerp(from, to, t) -> MtColor
-    Interpolate two RGBA color tables.
+ Interpolate two RGBA color tables.
 mt.color.from_hsv(hue, saturation, value, alpha?) -> MtColor
-    Create an RGBA color from normalized HSV components.
+ Create an RGBA color from normalized HSV components.
 mt.color.with_alpha(color, alpha) -> MtColor
-    Copy a color while replacing its alpha channel.
+ Copy a color while replacing its alpha channel.
 mt.color.from_oklch(lightness, chroma, hue, alpha?) -> MtColor
-    Create an RGBA color from OKLCH components.
+ Create an RGBA color from OKLCH components.
 mt.color.from_oklab(lightness, aAxis, bAxis, alpha?) -> MtColor
-    Create an RGBA color from OKLab components.
+ Create an RGBA color from OKLab components.
 mt.color.to_oklab(color) -> { lightness, a, b, alpha }
-    Convert an RGBA color to { lightness, a, b, alpha } OKLab components.
+ Convert an RGBA color to { lightness, a, b, alpha } OKLab components.
 mt.color.to_oklch(color) -> { lightness, chroma, hue, alpha }
-    Convert an RGBA color to { lightness, chroma, hue, alpha } OKLCH components.
+ Convert an RGBA color to { lightness, chroma, hue, alpha } OKLCH components.
 mt.color.from_okhsv(hue, saturation, value, alpha?) -> MtColor
-    Create an RGBA color from gamut-normalized OKHSV components.
+ Create an RGBA color from gamut-normalized OKHSV components.
 mt.color.to_okhsv(color) -> { hue, saturation, value, alpha }
-    Convert an RGBA color to { hue, saturation, value, alpha } OKHSV components.
+ Convert an RGBA color to { hue, saturation, value, alpha } OKHSV components.
 mt.color.from_okhsl(hue, saturation, lightness, alpha?) -> MtColor
-    Create an RGBA color from gamut-normalized OKHSL components.
+ Create an RGBA color from gamut-normalized OKHSL components.
 mt.color.to_okhsl(color) -> { hue, saturation, lightness, alpha }
-    Convert an RGBA color to { hue, saturation, lightness, alpha } OKHSL components.
+ Convert an RGBA color to { hue, saturation, lightness, alpha } OKHSL components.
 mt.color.lerp_oklab(from, to, t) -> MtColor
-    Interpolate two RGBA colors in OKLab space.
+ Interpolate two RGBA colors in OKLab space.
 mt.color.lerp_oklch(from, to, t) -> MtColor
-    Interpolate two RGBA colors in OKLCH space along the shortest hue path.
+ Interpolate two RGBA colors in OKLCH space along the shortest hue path.
 mt.color.lerp_okhsv(from, to, t) -> MtColor
-    Interpolate two RGBA colors in OKHSV space along the shortest hue path.
+ Interpolate two RGBA colors in OKHSV space along the shortest hue path.
 mt.color.lerp_okhsl(from, to, t) -> MtColor
-    Interpolate two RGBA colors in OKHSL space along the shortest hue path.
+ Interpolate two RGBA colors in OKHSL space along the shortest hue path.
 ```
 
 ### mt.ease.*
 
 ```text
 mt.ease.linear(t) -> number
-    Apply linear easing.
+ Apply linear easing.
 mt.ease.in_quad(t) -> number
-    Apply in_quad easing.
+ Apply in_quad easing.
 mt.ease.out_quad(t) -> number
-    Apply out_quad easing.
+ Apply out_quad easing.
 mt.ease.in_out_quad(t) -> number
-    Apply in_out_quad easing.
+ Apply in_out_quad easing.
 mt.ease.in_cubic(t) -> number
-    Apply in_cubic easing.
+ Apply in_cubic easing.
 mt.ease.out_cubic(t) -> number
-    Apply out_cubic easing.
+ Apply out_cubic easing.
 mt.ease.in_out_cubic(t) -> number
-    Apply in_out_cubic easing.
+ Apply in_out_cubic easing.
 mt.ease.in_quart(t) -> number
-    Apply in_quart easing.
+ Apply in_quart easing.
 mt.ease.out_quart(t) -> number
-    Apply out_quart easing.
+ Apply out_quart easing.
 mt.ease.in_out_quart(t) -> number
-    Apply in_out_quart easing.
+ Apply in_out_quart easing.
 mt.ease.in_sine(t) -> number
-    Apply in_sine easing.
+ Apply in_sine easing.
 mt.ease.out_sine(t) -> number
-    Apply out_sine easing.
+ Apply out_sine easing.
 mt.ease.in_out_sine(t) -> number
-    Apply in_out_sine easing.
+ Apply in_out_sine easing.
 mt.ease.in_circ(t) -> number
-    Apply in_circ easing.
+ Apply in_circ easing.
 mt.ease.out_circ(t) -> number
-    Apply out_circ easing.
+ Apply out_circ easing.
 mt.ease.in_out_circ(t) -> number
-    Apply in_out_circ easing.
+ Apply in_out_circ easing.
 mt.ease.in_expo(t) -> number
-    Apply in_expo easing.
+ Apply in_expo easing.
 mt.ease.out_expo(t) -> number
-    Apply out_expo easing.
+ Apply out_expo easing.
 mt.ease.in_out_expo(t) -> number
-    Apply in_out_expo easing.
+ Apply in_out_expo easing.
 mt.ease.in_back(t) -> number
-    Apply in_back easing.
+ Apply in_back easing.
 mt.ease.out_back(t) -> number
-    Apply out_back easing.
+ Apply out_back easing.
 mt.ease.in_out_back(t) -> number
-    Apply in_out_back easing.
+ Apply in_out_back easing.
 mt.ease.in_elastic(t) -> number
-    Apply in_elastic easing.
+ Apply in_elastic easing.
 mt.ease.out_elastic(t) -> number
-    Apply out_elastic easing.
+ Apply out_elastic easing.
 mt.ease.in_out_elastic(t) -> number
-    Apply in_out_elastic easing.
+ Apply in_out_elastic easing.
 mt.ease.in_bounce(t) -> number
-    Apply in_bounce easing.
+ Apply in_bounce easing.
 mt.ease.out_bounce(t) -> number
-    Apply out_bounce easing.
+ Apply out_bounce easing.
 mt.ease.in_out_bounce(t) -> number
-    Apply in_out_bounce easing.
+ Apply in_out_bounce easing.
 mt.ease.cubic_bezier(x1, y1, x2, y2, t) -> number
-    Apply a CSS-compatible cubic Bezier easing curve.
+ Apply a CSS-compatible cubic Bezier easing curve.
 ```
 
 ### mt.layout.*
 
 ```text
 mt.layout.reflow(ctx, gap?, config?) -> void
-    Reflows characters from exact horizontal or vertical typesetting origins while preserving shaped spacing and applying current scale/stretch; skipped targets contribute advances without being moved.
+ Reflows characters from exact horizontal or vertical typesetting origins while preserving shaped spacing and applying current scale/stretch; skipped targets contribute advances without being moved.
 mt.layout.place_2d(ctx, item, canvasX, canvasY) -> number, number
-    Places a character or part anchor at an exact pre-3D canvas point through the complete global/character/part 2D hierarchy.
+ Places a character or part anchor at an exact pre-3D canvas point through the complete global/character/part 2D hierarchy.
 mt.layout.get_canvas_position_2d(ctx, item) -> number, number
-    Calculates the exact current pre-3D canvas position (canvasX, canvasY) of a character or part anchor.
+ Calculates the exact current pre-3D canvas position (canvasX, canvasY) of a character or part anchor.
 mt.layout.radial_distance(ctx, canvasX, canvasY, centerX?, centerY?) -> number
-    Aspect-corrected distance from a canvas point to the centre of a radial effect.
+ Aspect-corrected distance from a canvas point to the centre of a radial effect.
 mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY) -> number, number
-    Calculates the relative offset_x and offset_y required to place a character or part anchor at an exact pre-3D canvas position (canvasX, canvasY) without mutating item properties.
+ Calculates the relative offset_x and offset_y required to place a character or part anchor at an exact pre-3D canvas position (canvasX, canvasY) without mutating item properties.
 mt.layout.measure_bounds_2d(ctx, targets?, targetType?) -> table|nil
-    Returns axis-aligned bounds of transformed natural part boxes after the complete 2D hierarchy and before 3D, projection, and deformation. Omit targets to measure every character or part.
+ Returns axis-aligned bounds of transformed natural part boxes after the complete 2D hierarchy and before 3D, projection, and deformation. Omit targets to measure every character or part.
 mt.layout.queue_on_path(ctx, path, options?) -> number[]
-    Distributes characters or parts along an arc-length path in reading order, spaced by their own natural advances, and returns the normalized distance ratio each item occupies.
+ Distributes characters or parts along an arc-length path in reading order, spaced by their own natural advances, and returns the normalized distance ratio each item occupies.
 mt.layout.group_by_line(ctx) -> MtLayoutLineGroup[]
-    Groups shaped characters by line_index in reading order; vertical-writing lines represent columns.
+ Groups shaped characters by line_index in reading order; vertical-writing lines represent columns.
 mt.layout.pivot_at_2d(ctx, item, anchor) -> void
-    Sets a semantic 2D bounds or writing-origin pivot on a character or part while preserving its current pre-3D pose.
+ Sets a semantic 2D bounds or writing-origin pivot on a character or part while preserving its current pre-3D pose.
+mt.layout.match_pose(ctx, destination, source, options?) -> void
+ Copy the current pose from a source character or part to a compatible destination, with em-based position deltas following the complete source-local pose hierarchy. match_bounds falls back from empty ink bounds to the logical character cell.
 mt.layout.retypeset(ctx, gap?, config?) -> void
-    Deprecated approximate re-typesetting; use reflow. DEPRECATED.
+ Deprecated approximate re-typesetting; use reflow. DEPRECATED.
 mt.layout.canvas_to_offset(resolvedGlobal, canvasWidth, canvasHeight, naturalCenterX, naturalCenterY, canvasX, canvasY) -> number, number
-    Deprecated global-only inverse conversion; use place_2d. DEPRECATED.
+ Deprecated global-only inverse conversion; use place_2d. DEPRECATED.
 mt.layout.set_canvas_position(item, canvasX, canvasY, ctx?) -> number, number
-    Deprecated partial canvas placement; use place_2d. DEPRECATED.
+ Deprecated partial canvas placement; use place_2d. DEPRECATED.
 mt.layout.group_bounds(ctx, targets, targetType?) -> table|nil
-    Deprecated approximate bounds; use measure_bounds_2d. DEPRECATED.
+ Deprecated approximate bounds; use measure_bounds_2d. DEPRECATED.
 ```
 
 ### mt.path.*
 
 ```text
 mt.path.bezier(p0, p1, p2, p3, t) -> number, number, number, number
-    Evaluates a point and its tangent (raw derivative, not normalized) on a cubic Bezier curve defined by 4 control points.
+ Evaluates a point and its tangent (raw derivative, not normalized) on a cubic Bezier curve defined by 4 control points.
 mt.path.catmull_rom(points, t) -> number, number, number, number
-    Evaluates a point and its tangent (raw derivative, not normalized) on a Catmull-Rom spline through an array of points; t is normalized over the whole path (0 at the first point, 1 at the last).
+ Evaluates a point and its tangent (raw derivative, not normalized) on a Catmull-Rom spline through an array of points; t is normalized over the whole path (0 at the first point, 1 at the last).
 mt.path.arc_length(points, aspectRatio?, options?) -> MtArcLengthPath
-    Builds an arc-length parameterized path from control points so items can be placed by distance instead of by curve parameter t. Returns an MtArcLengthPath exposing length() and at_distance(distanceRatio).
+ Builds an arc-length parameterized path from control points so items can be placed by distance instead of by curve parameter t. Returns an MtArcLengthPath exposing length() and at_distance(distanceRatio).
 ```
 
 ### path:*
 
 ```text
 path:length() -> number
-    Total path length in aspect-corrected canvas units. Called with a colon, as path:length().
+ Total path length in aspect-corrected canvas units. Called with a colon, as path:length().
 path:at_distance(distanceRatio) -> number, number, number
-    Position and heading at a normalized distance along the path, where 0 is the start and 1 is the end, measured by distance rather than by curve parameter. Returns x, y, and a heading in degrees already converted to the screen convention. Called with a colon, as path:at_distance(ratio).
+ Position and heading at a normalized distance along the path, where 0 is the start and 1 is the end, measured by distance rather than by curve parameter. Returns x, y, and a heading in degrees already converted to the screen convention. Called with a colon, as path:at_distance(ratio).
 ```
 
 ### mt.timeline.*
 
 ```text
 mt.timeline.progress(ctx, fallbackDuration?) -> number
-    Returns the host timeline progress, falling back to a looping progress if unavailable.
+ Returns the host timeline progress, falling back to a looping progress if unavailable.
 mt.timeline.duration(ctx, fallbackDuration?) -> number
-    Returns a finite positive host clip duration, or a fallback when no usable host duration is available.
+ Returns a finite positive host clip duration, or a fallback when no usable host duration is available.
 mt.timeline.remaining(ctx, fallbackDuration?) -> number
-    Remaining seconds until the clip end, using a looping fallback duration when the host timeline is unavailable.
+ Remaining seconds until the clip end, using a looping fallback duration when the host timeline is unavailable.
 mt.timeline.intro_outro_seconds(ctx, introSeconds, outroSeconds, fallbackDuration?) -> number, number
-    Real-time intro and outro progress anchored to the clip head and tail, compressed proportionally when the clip is shorter than the requested seconds.
+ Real-time intro and outro progress anchored to the clip head and tail, compressed proportionally when the clip is shorter than the requested seconds.
 mt.timeline.window_progress(ctx, start, duration) -> number
-    Returns linear progress through a context-local time window, clamped to 0 before the window and 1 after it.
+ Returns linear progress through a context-local time window, clamped to 0 before the window and 1 after it.
 mt.timeline.chain(ctx, initialValue, segments, options?) -> any
-    Evaluates duration-based pure-function segments with a segment-local context, passing each completed segment's final return value to the next and supporting fixed or remaining-span holds.
+ Evaluates duration-based pure-function segments with a segment-local context, passing each completed segment's final return value to the next and supporting fixed or remaining-span holds.
 mt.timeline.window_ctx(ctx, start, duration) -> table
-    Creates a derived context whose time, frame, duration, and progress are remapped to a clamped local time window.
+ Creates a derived context whose time, frame, duration, and progress are remapped to a clamped local time window.
 mt.timeline.intro_outro(progress, introFraction, outroFraction) -> number, number
-    Deprecated: fraction-based transitions stretch with the clip length; use intro_outro_seconds. DEPRECATED.
+ Deprecated: fraction-based transitions stretch with the clip length; use intro_outro_seconds. DEPRECATED.
 ```
 
 ### mt.text.*
 
 ```text
 mt.text.slice(text, startChar, endChar?) -> string
-    Slice a UTF-8 string by code-point indices; this is not grapheme-cluster aware.
+ Slice a UTF-8 string by code-point indices; this is not grapheme-cluster aware.
 mt.text.classify(text) -> string
-    Classifies the first Unicode code point of a text cluster as Japanese script, punctuation, Latin, digit, space, or other.
+ Classifies the first Unicode code point of a text cluster as Japanese script, punctuation, Latin, digit, space, or other.
 ```
 
 ## 14. mt.* full reference
@@ -2971,6 +3026,44 @@ local charX, charY = mt.layout.get_canvas_position_2d(ctx, ctx.chars[1])
 local partX, partY = mt.layout.get_canvas_position_2d(ctx, ctx.parts[1])
 ```
 
+#### `mt.layout.match_pose(ctx, destination, source, options?)`
+
+Synchronizes the current pose of `source` to a destination of the same kind. It accepts two Characters,
+or two Parts owned by the same Character. It is available only in `OnLayout`. The application order is size,
+rotation, depth, opacity, then position.
+
+- `position` : boolean : `true` : Synchronize the pre-3D canvas position
+- `position_delta_x` / `position_delta_y` : number : `0.0` : Untransformed-em displacements along the source-local X/Y axes
+- `rotation` : boolean : `true` : Synchronize 2D rotation
+- `rotation_offset` : number : `0.0` : Degrees added after synchronization
+- `size` : string : `"copy"` : `"none"` / `"copy"` / `"match_bounds"`
+- `size_scale_x` / `size_scale_y` : number : `1.0` : Positive per-axis multipliers
+- `depth` : boolean : `true` : Synchronize `z` / `yaw` / `pitch`
+- `z_offset` : number : `0.0` : Canvas-normalized displacement added to Z after synchronization
+- `yaw_offset` / `pitch_offset` : number : `0.0` : Angles in degrees added after synchronization
+- `opacity` : boolean : `false` : Synchronize opacity
+- `opacity_scale` : number : `1.0` : Non-negative opacity multiplier
+
+`match_bounds` applies the ratio of the natural bounds widths and heights to stretch. When a source ink-bounds
+axis is zero, it uses the logical character cell: horizontal advance for X in horizontal writing, vertical
+advance for Y in vertical writing, and one em for a zero advance or the cross axis. Parts have no advance and
+use one em. A zero destination-bounds axis keeps its existing effective scale while the other axis and pose
+still synchronize. The destination pivot is not changed.
+
+Position deltas use 1.0 as one untransformed em on both axes and do not use screen-fixed X/Y axes. For a Character they pass through the Global and source
+Character rotation, scale, and stretch. For a Part they additionally pass through the owning Character and
+source Part pose. Rotating or scaling the source therefore changes the delta direction and length.
+`rotation_offset` and `size_scale` adjust the destination and are not included in the delta transform.
+
+```lua
+mt.layout.match_pose(ctx, ctx.chars[4], ctx.chars[1], {
+    size = "match_bounds",
+    size_scale_x = 1.15,
+    size_scale_y = 1.2,
+    position_delta_y = -0.75,
+})
+```
+
 #### `mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY)`
 
 Calculates and returns the `offset_x` and `offset_y` required to place a character or part at the specified Canvas coordinates `(canvasX, canvasY)` before 3D transforms, without rewriting the properties themselves. The type is detected automatically from the character or part passed as `item`.
@@ -3342,6 +3435,21 @@ end
 
 For a static SVG string, convert it with `mt.svg_path` outside the function and retain it in a `local` variable to avoid reparsing it every frame.
 
+#### `mt.drawing_path()`
+
+Creates an empty mutable `MtDrawingPath`. It is available at top level and in every hook. Coordinates use
+Y-down part-local space where 1000 units equal 1 em. Build a shape with the existing construction methods
+and pass it to APIs such as `ctx.glyphs:declare({ path = path })`.
+
+```lua
+local diamond = mt.drawing_path()
+diamond:move_to(0, -500)
+diamond:line_to(500, 0)
+diamond:line_to(0, 500)
+diamond:line_to(-500, 0)
+diamond:close()
+```
+
 #### Drawing Path Editing API
 
 The `path` of a part obtained through `ctx.paths` can be edited with the following methods.
@@ -3354,6 +3462,8 @@ The `path` of a part obtained through `ctx.paths` can be edited with the followi
 - [`path:quad_to(cx, cy, x, y)`](#api-path-quad-to) : Add a quadratic Bézier curve
 - [`path:cubic_to(cx1, cy1, cx2, cy2, x, y)`](#api-path-cubic-to) : Add a cubic Bézier curve
 - [`path:close()`](#api-path-close) : Close the current subpath
+- [`path:bounds()`](#api-path-bounds) : Get tight bounds including curve extrema
+- [`path:map_points(callback)`](#api-path-map-points) : Transform every point without changing topology
 
 ##### Coordinate System
 
@@ -3481,6 +3591,30 @@ RET none
 ##### Changes
 
 Adds a close command to the target path.
+
+#### `path:bounds()`
+
+Returns tight bounds including curve extrema as four values: `minimumX, minimumY, maximumX, maximumY`.
+An empty path returns one `nil`. Values use the path's Y-down space where 1000 units equal 1 em. It works
+wherever the path can be referenced, on both read-only templates and mutable paths.
+
+#### `path:map_points(callback)`
+
+Replaces anchors and control points in command order with the two coordinates returned by
+`callback(x, y, point)`. Command kinds and counts, contours, and close state are preserved. The candidate
+is committed only after every callback succeeds.
+A standalone mutable path can use it wherever that path is retained; a `ctx.paths` target can use it in `OnPath`.
+
+`point` is a reused read-only view with `index`, `command_index`, `contour_index`, `role`
+(`anchor` / `control1` / `control2`), and `command` (`move` / `line` / `quad` / `cubic`). Limits are
+4096 points per path and 16384 points per script execution. Re-entering or modifying the same receiver
+inside its callback, or returning non-finite coordinates, raises an error and leaves the path unchanged.
+
+```lua
+path:map_points(function(x, y, point)
+    return x, y + math.sin(point.index * 1.7 + ctx.progress * math.pi * 2) * 25
+end)
+```
 
 ### 17. UTF-8 Text Processing
 
