@@ -1,4 +1,4 @@
-const CACHE_NAME = "mt-sim-e8e22801c36147a7";
+const CACHE_NAME = "mt-sim-96bf880e8cf5acfb";
 const PRECACHE_URLS = [
   "./",
   "apple-touch-icon.png",
@@ -8,7 +8,7 @@ const PRECACHE_URLS = [
   "chunks/bat-DXCZQHQY.js",
   "chunks/bicep-72L32CDL.js",
   "chunks/cameligo-33NXKP5V.js",
-  "chunks/chunk-4P7TKM2K.js",
+  "chunks/chunk-2Y42L4IA.js",
   "chunks/chunk-FB5IOQ5D.js",
   "chunks/chunk-ICLTXRTG.js",
   "chunks/chunk-JDEYA2L7.js",
@@ -105,7 +105,7 @@ const PRECACHE_URLS = [
   "chunks/typescript-QXWVDLDM.css",
   "chunks/typespec-RB3RAFXR.js",
   "chunks/vb-5YQ2AFRN.js",
-  "chunks/videoRecorder-DXX32KMZ.js",
+  "chunks/videoRecorder-MX7M7WWC.js",
   "chunks/vs-BUIN4OSX.js",
   "chunks/vs-EIMLXMZ7.css",
   "chunks/wgsl-IWK4SOIV.js",
@@ -140,10 +140,10 @@ const PRECACHE_URLS = [
   "style-1b4607e9bfdd.css",
   "third-party-notices.md",
   "web-main-EZTS765H.css",
-  "web-main-GU3RFY4H.js"
+  "web-main-L42YYYP7.js"
 ];
 const DEVELOPMENT = false;
-const BUILD_ID = "47134016e79ea631";
+const BUILD_ID = "b0bd60696ac963a6";
 const CACHE_PREFIX = "mt-sim-";
 const kPrecacheBatchSize = 8;
 const kFixedNameContent = [

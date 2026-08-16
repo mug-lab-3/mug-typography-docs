@@ -504,6 +504,10 @@ from the undeformed layout, not recomputed from animated positions.
 `write_on_start` / `write_on_end` control visibility; manual order controls only
 order.
 
+Front means painted first, so listed elements end up **behind** the rest. List
+the backdrop, not the text. Characters are ranked by their best part rank and
+painted as one block, so `p<n>` also moves the character owning part n.
+
 For painting, 2D follows manual order. In 3D, each part's view depth is primary;
 manual order, stroke order, then layout order break equal-depth ties. Write-on
 reveal always follows manual order in both 2D and 3D.
