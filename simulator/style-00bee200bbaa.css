@@ -306,6 +306,12 @@ body .mt-editor-grid .dv-split-view-container.dv-vertical > .dv-sash-container >
   background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
 }
 
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
 .toolbar button:focus-visible,
 .toolbar input:focus-visible {
   outline: 1px solid var(--vscode-focusBorder, #007fd4);

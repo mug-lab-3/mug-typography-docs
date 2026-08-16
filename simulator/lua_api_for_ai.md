@@ -520,7 +520,12 @@ reveal always follows manual order in both 2D and 3D.
   No file, network or process access.
 - Limits: 5,000,000 instructions per callback invocation; 128 MiB memory.
   Exceeding either is treated as an error (section 1, rule 5).
-- `print(...)` writes to the simulator Output panel and is ignored by the host.
+- `print(...)` writes to the simulator Output panel.
+- Rule on debugging with `print(...)`:
+  1. Do not include `print(...)` in normal script generation or for static fixes (syntax, API usage, units, Inspector overrides), and do not request simulator logs during normal workflows.
+  2. Only when diagnosing runtime-dependent issues (e.g. unexpected animation curves, timing glitches, boundary states), insert temporary `print(...)` statements for the suspect variables or expressions.
+  3. In that case, ask the user to mark the range on the timeline (if narrowing down is needed), click the Frame Dump button (bug icon), and share the log output.
+  4. Always remove all diagnostic `print(...)` statements before providing the final script.
 - Errors that raise: writing a non-writable field, adding an unknown field, type
   mismatch, replacing or resizing `ctx.chars` / `ctx.parts`, assigning an invalid
   string to an enumerated field.
