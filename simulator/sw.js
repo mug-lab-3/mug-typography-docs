@@ -1,4 +1,4 @@
-const CACHE_NAME = "mt-sim-5407c437acd56706";
+const CACHE_NAME = "mt-sim-36b9da02cd79dc23";
 const PRECACHE_URLS = [
   "./",
   "apple-touch-icon.png",
@@ -140,10 +140,10 @@ const PRECACHE_URLS = [
   "style-00bee200bbaa.css",
   "third-party-notices.md",
   "web-main-EZTS765H.css",
-  "web-main-TYV65SYD.js"
+  "web-main-ZMZQGZKX.js"
 ];
 const DEVELOPMENT = false;
-const BUILD_ID = "564c38a4483da151";
+const BUILD_ID = "fbbf3d76763ef1c6";
 const CACHE_PREFIX = "mt-sim-";
 const kPrecacheBatchSize = 8;
 const kFixedNameContent = [

@@ -147,14 +147,9 @@ https://registry.npmjs.org/mediabunny/-/mediabunny-1.52.0.tgz.
 
 ## Google Material Icons (Apache License 2.0)
 
-The simulator UI contains inline SVG paths adapted from Google Material
-Icons. These include camera, check/done, copy/content-copy,
-paste/content-paste, save, folder, video-camera, code, download, info,
-delete, open-in-new, and more-horizontal designs. The paths have been
-modified for the simulator's sizing and visual language.
-
-The bundled `34_mt_svg_path.lua` reference sample also contains an adapted
-`rocket_launch` path.
+Inline SVG path data adapted from Google Material Icons is used in the
+simulator UI and in some of the bundled sample scripts. The paths have been
+modified for this project's sizing and visual language.
 
 Source: https://github.com/google/material-design-icons
 
