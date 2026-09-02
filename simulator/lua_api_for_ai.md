@@ -109,9 +109,9 @@ ctx.global.shadow.distance = 0.02   -- WRONG: 0.02% of short side, sub-pixel, in
 ctx.global.shadow.distance = 1.2    -- RIGHT: 1.2% of short side (useful range 0.8-2.0)
 ```
 
-**5. An error anywhere in a callback discards every change that callback made.**
-There is no partial application. A failed `OnPreLayout` also skips `OnLayout`
-and `OnPath`.
+**5. On the host, an error anywhere in a callback aborts the current frame.**
+Changes made before the error are not guaranteed to be rolled back, but the
+incomplete frame is never rendered. A failed callback also skips later callbacks.
 
 **6. Fixed-duration intro/outro transitions use real-time seconds.** Use
 `mt.timeline.intro_outro_seconds` or `mt.timeline.remaining` when animation speed
@@ -148,9 +148,9 @@ Then, in this order every frame:
 | Callback | Writable targets | On error |
 |---|---|---|
 | `OnInitialize(ctx)` | `mt.storage` (deprecated). Only `ctx.canvas` / `ctx.fonts` / `ctx.meta` readable | Frame evaluation does not start |
-| `OnPreLayout(ctx)` | `ctx.global`, `ctx.camera` | Host values are used; `OnLayout` / `OnPath` skipped |
-| `OnLayout(ctx)` | `ctx.chars[i]`, `ctx.parts[i]`, `ctx.bounding_box`, `ctx.output` | Unmodified layout is rendered |
-| `OnPath(ctx)` | `path` of parts obtained from `ctx.paths` | Original glyph outlines are rendered |
+| `OnPreLayout(ctx)` | `ctx.global`, `ctx.camera` | Frame is aborted; `OnLayout` / `OnPath` skipped |
+| `OnLayout(ctx)` | `ctx.chars[i]`, `ctx.parts[i]`, `ctx.bounding_box`, `ctx.output` | Frame is aborted; `OnPath` skipped |
+| `OnPath(ctx)` | `path` of parts obtained from `ctx.paths` | Frame is aborted |
 
 Later callbacks can read what earlier ones finalized, but cannot write back:
 `ctx.global` and `ctx.camera` are readable in `OnLayout` and read-only there.
@@ -631,8 +631,10 @@ starts 20% inward from each edge. `angle = 0` is left-to-right, `90` is
 top-to-bottom, `-90` (or `270`) is bottom-to-top. The fill color sits at the
 `start_position` end and `end_color` at the `end_position` end. Setting
 `start_position` greater than `end_position` reverses the ramp, which is
-equivalent to rotating `angle` by 180 degrees. Under 3D the box
-is measured on the layout plane, so camera moves do not shift the gradient.
+equivalent to rotating `angle` by 180 degrees. Under 3D the box is the projected
+text bounds in canvas space. Camera and pose changes update that box, while the
+gradient angle remains aligned to the canvas axes, so Z rotation moves the text
+through the gradient instead of rotating the gradient with it.
 
 **Passing values between callbacks.** A file-scope `local` may carry a value from
 `OnPreLayout` to `OnLayout` **within the same frame** only, and must be
