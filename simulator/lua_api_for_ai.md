@@ -2,7 +2,7 @@
      Prose sections come from scripting/ai-preamble.md; reference tables come from
      scripting/api-schema.json. Edit those sources instead. -->
 
-Target API level: **9**. Lua 5.4 for the Mug Typography plugin. Complete contract
+Target API level: **10**. Lua 5.4 for the Mug Typography plugin. Complete contract
 for `ctx`: every field, unit, direction, reference point. Read section 1 first —
 most failures are units, direction or reference point, not syntax.
 
@@ -13,7 +13,7 @@ be attached, and there is no companion document to ask the user for.
 
 Navigation, in the order to reach for it:
 
-- Sections 1-11 — the rules, units and syntax. Read section 1 first.
+- Sections 1-12 — the rules, units and syntax. Read section 1 first.
 - `ctx` reference — every field with unit, reference point and read/write phases.
 - `mt.*` utility reference — one line per function: signature and purpose. Use
   it to find the function you want.
@@ -512,6 +512,39 @@ For painting, 2D follows manual order. In 3D, each part's view depth is primary;
 manual order, stroke order, then layout order break equal-depth ties. Write-on
 reveal always follows manual order in both 2D and 3D.
 
+### Textures
+
+A texture states what the letters are made of. **Choose one only when the user
+asked for that look or named a material**; a request to move, time or arrange
+text is not a reason to add one. `none` is usually right.
+
+`texture.p1`–`p4` are generic slots named by `texture.type`:
+
+| `texture.type` | `p1` | `p2` | `p3` | `p4` |
+|---|---|---|---|---|
+| `water_droplet` | thickness | roundness | gloss | light angle |
+| `air_cushion` | inflation | seal width | wrinkles | light angle |
+| `glitter` | flake size | highlight ratio | flake amount | light angle |
+| `iridescent` | film thickness | hue range | strength | light angle |
+| `faceted` | facet count | bevel depth | polish | light angle |
+| `stained_glass` | piece size | lead width | hue range | glow |
+| `metallic` | polish | relief | reflection contrast | light angle |
+| `metallic_2` | polish | relief | exposure | light angle |
+
+- Write `0.0`–`1.0` in every slot except a light angle, which is degrees. The
+  tables say `unitless` only because that one slot changes unit.
+- `stained_glass` glow: `0.5` is plain glass, `1` emits, **`0` goes dark**.
+- `glitter` flake size `0` removes the flakes; `stained_glass` lead width `0`
+  removes the lead.
+- Glitter hue spread is fixed at full range around `texture.color`; stained glass uses the fill hue.
+- Glitter flake amount: 0 removes all flakes and glow, 1 keeps full density. Remaining flakes keep their positions and colours.
+- Lit glitter flakes have a bright core and soft glow within the text outline.
+- Glitter highlight ratio: 0 lights no flakes, 1 lights all flakes. Placement stays fixed.
+- `texture.color` sets glitter metal colour and otherwise tints added light, but is **the lead colour** for
+  `stained_glass`; `iridescent` ignores it.
+- `metallic` / `metallic_2` take the metal's own colour from the **fill**, not `texture.color`, which lights them instead. `metallic_2` p3 is exposure, neutral at `0.5`.
+- On a character or part, set `use = true`, or the inherited texture stays.
+
 ## 7. Execution environment
 
 - Available: `math`, `string`, `table`, `utf8`, safe base functions.
@@ -550,7 +583,7 @@ end
 
 ## 9. Script metadata header
 
-Leading Lua comments configure the simulator. They are not part of the runtime
+Leading Lua comments configure the simulator and host script behavior. They are not part of the runtime
 API. `@MugTypography` must appear within the first 5 lines for the script to be
 recognised.
 
@@ -561,7 +594,7 @@ recognised.
 -- @title Falling Letters
 -- @author Mug
 -- @version 1.0
--- @api_level 8
+-- @api_level 10
 -- @input number 1 "Amplitude" default=15.0
 --[[ @description
 What the effect does, in a sentence or two.
@@ -570,6 +603,17 @@ What the effect does, in a sentence or two.
 
 New scripts should declare the current target API level so unsupported plugin
 versions reject them instead of failing at runtime.
+
+`-- @time_independent` takes no value and declares identical output across time
+when Inspector values are unchanged. Place it in the leading uninterrupted,
+unindented `--` comment block before blank lines, code, or block comments.
+The host can reuse the overlay and excludes this script from frame-varying
+notification. Omission preserves time-dependent behavior. This is an author
+contract, not automatic analysis: do not declare it for output depending on
+`ctx.time`, `ctx.frame`, timeline information, call counts, or external state.
+Inspector changes (including animated `@input` slots), source edits, and render
+size changes still invalidate reuse. Other time-varying effects remain active.
+The simulator parses the declaration but continues evaluating preview frames.
 
 `@description` is the one directive written as a block comment, because its body
 runs to several lines; the text between `--[[ @description` and `]]` is the whole
@@ -603,13 +647,63 @@ colors, or text the user should control, and do not declare unused slots.
 - `number`: index=1..10; finite default=-1000000..1000000; omitted=0.0
 - `color`: index=1..4; default={r,g,b,a}, channels=0..1; omitted={1,1,1,1}
 - `text`: index=1..2; quoted single-line NUL-free UTF-8 default<=4096 bytes; omitted=""
+- `boolean`: index=1..4; default=true or false; omitted=false (API level 10)
 - label: quoted UTF-8, 1..64 bytes
 - label/text escapes: `\"` and `\\` only
 - each type/index pair: at most once
 - Inspector visibility: declared slots only
-- fixed read-only arrays: numbers=10, colors=4, texts=2; indexes are 1-based
+- fixed read-only arrays: numbers=10, colors=4, texts=2, booleans=4; indexes are 1-based
 
-## 10. Recipes for common problems
+## 10. Motion design and animation principles
+
+Start with the user's requested mood, degree of restraint, readability needs and
+brand or genre conventions. Motion principles are tools for expressing that
+intent, not effects that every script must display. A raw mathematical mapping
+often feels visually flat, but linear, uniform or minimal motion is correct when
+the intended metaphor is mechanical, synchronized, restrained or informational.
+Build only the complexity the concept needs:
+
+1. **Interpret intent through metaphor:**
+   Translate the user's prompt into a physical or visual concept (e.g. elastic
+   impact, floating zero-gravity, optical slit-scan, or mechanical unfolding).
+   Every parameter choice should serve that metaphor.
+2. **Select animation principles that support the metaphor:**
+   Treat timing, anticipation, follow-through, staging, squash and stretch, and
+   overlapping action as a palette rather than a mandatory recipe:
+   - **Weight and inertia:** For physical motion, use purposeful acceleration or
+     deceleration and, when the material calls for it, anticipation and settling.
+   - **Elasticity and mass:** Use proportional deformation and intentional pivot
+     points only for materials that should bend, compress or rebound.
+   - **Overlapping action:** Stagger characters, parts or secondary properties
+     when the subject should feel organic. Keep them synchronized when rigidity,
+     machinery, ceremony or clarity is the point.
+3. **Think beyond 2D translation:**
+   Rich typography orchestrates multiple expressive dimensions. Before settling
+   on offset and rotation, consider whether the metaphor is better served by an
+   axis further from the obvious one. The ones easiest to overlook:
+   - **Depth.** `ctx.chars[i].z`, `ctx.parts[i].z` and `ctx.camera` place text in
+     space; the camera can move independently of it.
+   - **Sub-character structure.** `ctx.parts` reaches the solid components of a
+     glyph, so a character can come apart, assemble, or move at two scales at
+     once. Holes remain attached to the solid that contains them.
+   - **The letterform itself.** `ctx.glyphs:declare` replaces a glyph's outline
+     with geometry the script builds, and `mt.svg_path` / `mt.drawing_path`
+     construct it. The shape is not a fixed input.
+   - **Trajectory as data.** `mt.path.*` places and orients characters along an
+     arbitrary path, rather than at positions computed one axis at a time.
+   - **Optical properties.** `ctx.global.shadow.distance`,
+     `ctx.global.shadow.angle`, `ctx.global.shadow.color` and
+     `ctx.global.gradient.angle` are animatable. OKLab-family color utilities
+     can couple perceptual color changes to motion without uneven brightness.
+
+   Each of these has its own section or reference entry; read it before use
+   rather than guessing the units.
+
+Use this section while choosing the concept, then verify that the finished
+script still communicates the intended metaphor without sacrificing the user's
+constraints or adding motion that has no clear role.
+
+## 11. Recipes for common problems
 
 **Advance after per-character scale.** Changing `scale` does not change the
 advance, so scaled characters overlap or leave gaps. Call `mt.layout.reflow(ctx)`
@@ -699,7 +793,7 @@ on an older plugin who copies a script out of it will hit exactly this. Check
 the level at the top of this document against the `this build:` number the user
 reports before assuming they match.
 
-## 11. Checklist before returning a script
+## 12. Checklist before returning a script
 
 Verify each item against the field tables below. These are the failures seen most
 often in generated scripts.
@@ -731,12 +825,16 @@ often in generated scripts.
     (section 5).
 13. Derived colors use the appropriate OKLab-family space: OKLab for mixing,
     OKLCH for hue travel, and OKHSL rather than OKHSV for lightness changes.
-14. A complete new script declares `-- @api_level 8` in its metadata header.
+14. A complete new script declares `-- @api_level 10` in its metadata header.
+15. The motion follows the user's requested mood, restraint and readability
+    constraints; a physical metaphor does not override explicit creative intent.
+16. Every secondary movement or optical change supports the main action. Remove
+    decoration that competes with the message or has no clear role.
 
 State any assumption you had to make, and name any documentation you needed but
 were not given.
 
-## 12. ctx reference
+## 13. ctx reference
 
 Format: `path : type [R:readable phases  W:writable phases]`, then unit metadata,
 then description. Phases are `init` / `pre` / `layout` / `path`, and `all` is all four.
@@ -890,6 +988,8 @@ script_inputs.colors : MtColor[] [R:all read-only]
  Length 4; 1-based.
 script_inputs.texts : string[] [R:all read-only]
  Length 2; 1-based.
+script_inputs.booleans : boolean[] [R:all read-only]
+ Length 4; 1-based.
 ```
 
 ### ctx.global
@@ -953,6 +1053,8 @@ ctx.global.fill : MtGlobalFill [R:pre,layout,path W:pre]
  Global fill color settings.
 ctx.global.gradient : MtGradient [R:pre,layout,path W:pre]
  Global gradient settings.
+ctx.global.texture : MtTexture [R:pre,layout,path W:pre]
+ Global texture (fill material) settings.
 ctx.global.stroke : MtGlobalStroke [R:pre,layout,path W:pre]
  Resolved global stroke settings.
 ctx.global.shadow : MtGlobalShadow [R:pre,layout,path W:pre]
@@ -1007,8 +1109,8 @@ ctx.global.stroke.outer_width : number [R:pre,layout,path W:pre]
 ctx.global.stroke.outer_color : MtColor [R:pre,layout,path W:pre]
  Outer stroke color.
 ctx.global.stroke.order : string [R:pre,layout,path W:pre]
- values=fill_over_stroke|stroke_over_fill
- Whether fill or stroke is drawn on top.
+ values=fill_over_stroke|stroke_over_fill|fill_over_stroke_per_character
+ Whether fill or stroke is drawn on top. fill_over_stroke_per_character finishes every pass of one character before the next starts.
 ctx.global.stroke.join : string [R:pre,layout,path W:pre]
  values=miter_clip|round|bevel|miter_round|miter_bevel
  Stroke corner join style.
@@ -1118,6 +1220,8 @@ ctx.chars[i].stroke : MtIndividualStroke [R:layout,path W:layout]
  Individual stroke override.
 ctx.chars[i].shadow : MtIndividualShadow [R:layout,path W:layout]
  Individual shadow color override.
+ctx.chars[i].texture : MtTexture [R:layout,path W:layout]
+ Individual texture override; script-only (no host parameter group backs it), so it always reads as unused/default unless a script sets it.
 ```
 
 ### ctx.chars[i].fill / ctx.parts[i].fill
@@ -1211,6 +1315,8 @@ ctx.parts[i].stroke : MtIndividualStroke [R:layout,path W:layout]
  Individual stroke override; script-only (no host parameter group backs it, unlike the character equivalent), so it always reads as unused/default unless a script sets it.
 ctx.parts[i].shadow : MtIndividualShadow [R:layout,path W:layout]
  Individual shadow color override; script-only (no host parameter group backs it, unlike the character equivalent), so it always reads as unused/default unless a script sets it.
+ctx.parts[i].texture : MtTexture [R:layout,path W:layout]
+ Individual texture override; script-only (no host parameter group backs it), so it always reads as unused/default unless a script sets it.
 ```
 
 ### ctx.chars[i].geometry
@@ -1464,6 +1570,30 @@ glyph_declarations:declare(declaration) -> string [R:pre read-only]
  Declare one custom glyph and return its placeholder; path uses Y-down drawing coordinates, while bounds and advances use Y-up layout coordinates.
 ```
 
+### texture
+
+```text
+texture.use : boolean [R:layout,path W:layout]
+ Whether this element's own texture is used instead of the inherited one. Ignored on ctx.global.
+texture.type : string [R:pre,layout,path W:pre,layout]
+ values=none|water_droplet|air_cushion|glitter|iridescent|faceted|stained_glass|metallic|metallic_2
+ Fill material; none paints the plain fill.
+texture.p1 : number [R:pre,layout,path W:pre,layout]
+ unit=unitless
+ First shared material control; 0..1 for every type. Its meaning follows texture.type (water_droplet thickness, air_cushion inflation, glitter flake size where 0 removes the flakes, iridescent film thickness, faceted facet count, stained_glass piece size relative to the untransformed character, metallic and metallic_2 polish where 0 is matte and 1 is a mirror). Out-of-range values are folded, never written back.
+texture.p2 : number [R:pre,layout,path W:pre,layout]
+ unit=unitless
+ Second shared material control; 0..1 for every type (water_droplet roundness, air_cushion seal width, glitter highlight ratio, iridescent hue range, faceted bevel depth, stained_glass lead width; 0 removes the lead; metallic and metallic_2 relief).
+texture.p3 : number [R:pre,layout,path W:pre,layout]
+ unit=unitless
+ Third shared material control; 0..1 for every type (water_droplet gloss, air_cushion wrinkles, glitter flake amount, iridescent strength, faceted polish, stained_glass hue range, metallic reflection contrast, metallic_2 exposure where 0.5 is the neutral studio). Glitter flake amount is 0 for no flakes and 1 for full density; its hue spread is fixed at full range around texture.color. Stained glass hue range spreads from the fill underneath.
+texture.p4 : number [R:pre,layout,path W:pre,layout]
+ unit=unitless
+ Fourth shared material control. Light angles (water_droplet, air_cushion, glitter, iridescent, faceted, metallic, metallic_2) are degrees and wrap; stained_glass glow is 0..1 whose midpoint 0.5 is plain glass, above it the panes emit and below it they darken.
+texture.color : MtColor [R:pre,layout,path W:pre,layout]
+ Colors what the material adds on top of the fill: its light, the metal colour for glitter, or the lead for stained_glass. White leaves the light as the material makes it, and paints white lead. Iridescent ignores this. Metallic and metallic_2 take it as the lighting colour; the metal's own colour is the fill.
+```
+
 ### color value
 
 ```text
@@ -1481,7 +1611,7 @@ color value.a : number [R:pre,layout,path W:pre,layout]
  Alpha channel in the range 0 to 1.
 ```
 
-## 13. mt.* utility reference
+## 14. mt.* utility reference
 
 All `mt.*` members are readable in every callback. Signatures list parameter names only.
 
@@ -1775,7 +1905,7 @@ mt.text.classify(text) -> string
  Classifies the first Unicode code point of a text cluster as Japanese script, punctuation, Latin, digit, space, or other.
 ```
 
-## 14. mt.* full reference
+## 15. mt.* full reference
 
 Per-function argument types, units, defaults, permitted values and error
 conditions. Jump to a function's `#### ` heading when you know its name;
@@ -2565,7 +2695,7 @@ RET
 - `start_y` : `number` : canvas normalized position : `nil` : Starting position used when `start_mode = "absolute"`
 - `drop_height` : `number` : canvas normalized displacement : `0.3` : Distance above the current position when `start_mode = "relative"`
 - `ground_mode` : `string` : Same as `start_mode` : Reference for the landing position. `"absolute"` treats `groundY` as a fixed position on the canvas; `"relative"` follows transforms higher in the hierarchy
-- `align_to` : `string` : `"bottom"` : Position to place on the ground. `"bottom"` / `"bounds_bottom"` means the bottom edge of the ink bounds, `"baseline"` means the typesetting baseline origin, and `"center"` means the center of the ink bounds
+- `align_to` : `string` : `"bottom"` : Position to place on the ground. `"bottom"` / `"bounds_bottom"` means the bottom edge of the ink bounds, `"baseline"` means the character's horizontal baseline, and `"center"` means the center of the ink bounds. For a part, which has no baseline, `"baseline"` falls back to the bottom edge
 - `gravity` : `number` : canvas normalized displacement/second² : `4.0` : Magnitude of acceleration toward the ground
 - `restitution` : `number` : `0.45` : Coefficient of restitution
 - `start_velocity` : `number` : canvas normalized displacement/second : `0.0` : Initial velocity along the Y axis
@@ -3146,7 +3276,18 @@ Sets the target’s `pivot_x` and `pivot_y`, then corrects `offset_x` and `offse
 
 ##### `anchor`
 
-Shared anchors are `"center"`, `"top"`, `"bottom"`, `"left"`, `"right"`, `"top_left"`, `"top_right"`, `"bottom_left"`, and `"bottom_right"`. Characters additionally support `"baseline"`, `"vertical_start"`, `"vertical_center"`, and `"vertical_end"`.
+Characters and parts share these anchors:
+
+- `"center"`: center of the ink bounds
+- `"top"` / `"bottom"`: horizontal center at the top/bottom edge of the ink bounds
+- `"left"` / `"right"`: left/right edge at the vertical center of the ink bounds
+- `"top_left"` / `"top_right"` / `"bottom_left"` / `"bottom_right"`: corresponding corner of the ink bounds
+
+Characters additionally support these anchors:
+
+- `"baseline_left"` / `"baseline"` / `"baseline_right"`: left edge/center/right edge of the ink bounds on the horizontal baseline
+- `"typesetting_origin"`: character-cell left edge on the horizontal baseline
+- `"vertical_start"` / `"vertical_center"` / `"vertical_end"`: vertical column axis at the character-cell start/center/end
 
 Existing pivot values are not 0–1 ratios within the bounds. `0.5` is the natural center; X is displacement as a ratio of canvas width, and Y is displacement as a ratio of canvas height. This function converts the bounds dimensions, character typesetting origin, and differing natural centers of characters and parts into the existing pivot units.
 

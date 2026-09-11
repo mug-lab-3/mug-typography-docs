@@ -1,4 +1,4 @@
-const CACHE_NAME = "mt-sim-f8db8697ecff638a";
+const CACHE_NAME = "mt-sim-562e315b7bfeee38";
 const PRECACHE_URLS = [
   "./",
   "apple-touch-icon.png",
@@ -8,7 +8,7 @@ const PRECACHE_URLS = [
   "chunks/bat-DXCZQHQY.js",
   "chunks/bicep-72L32CDL.js",
   "chunks/cameligo-33NXKP5V.js",
-  "chunks/chunk-BSE735EV.js",
+  "chunks/chunk-EJQCXKWQ.js",
   "chunks/chunk-FB5IOQ5D.js",
   "chunks/chunk-ICLTXRTG.js",
   "chunks/chunk-JDEYA2L7.js",
@@ -105,7 +105,7 @@ const PRECACHE_URLS = [
   "chunks/typescript-QXWVDLDM.css",
   "chunks/typespec-RB3RAFXR.js",
   "chunks/vb-5YQ2AFRN.js",
-  "chunks/videoRecorder-6KG7QC2S.js",
+  "chunks/videoRecorder-3SDPFV5Z.js",
   "chunks/vs-BUIN4OSX.js",
   "chunks/vs-EIMLXMZ7.css",
   "chunks/wgsl-IWK4SOIV.js",
@@ -134,16 +134,16 @@ const PRECACHE_URLS = [
   "lua_api_for_ai.md",
   "manifest.json",
   "monaco-editor.worker-HYMU3P3O.js",
-  "prelude-03f50d9d5e74.lua",
+  "prelude-7a85aa47ceb7.lua",
   "prelude_drawing_path-3e4364d9ad16.lua",
   "sample-catalog.json",
   "style-00bee200bbaa.css",
   "third-party-notices.md",
-  "web-main-EZTS765H.css",
-  "web-main-XAAFM3LN.js"
+  "web-main-64VY3GZ6.js",
+  "web-main-EZTS765H.css"
 ];
 const DEVELOPMENT = false;
-const BUILD_ID = "71ba80034949c2c8";
+const BUILD_ID = "75bc4de12427fea5";
 const CACHE_PREFIX = "mt-sim-";
 const kPrecacheBatchSize = 8;
 const kFixedNameContent = [
