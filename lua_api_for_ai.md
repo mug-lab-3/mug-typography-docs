@@ -2,7 +2,7 @@
      Prose sections come from scripting/ai-preamble.md; reference tables come from
      scripting/api-schema.json. Edit those sources instead. -->
 
-Target API level: **10**. Lua 5.4 for the Mug Typography plugin. Complete contract
+Target API level: **11**. Lua 5.4 for the Mug Typography plugin. Complete contract
 for `ctx`: every field, unit, direction, reference point. Read section 1 first —
 most failures are units, direction or reference point, not syntax.
 
@@ -330,7 +330,7 @@ RGBA is the storage format, not the preferred space for color calculations.
 For derived colors, calculate in the OKLab family and convert back to RGBA:
 
 - Blend two colors : `mt.color.lerp_oklab` : perceptually uniform direct path without a muddy midpoint
-- Travel around the hue circle : `mt.color.lerp_oklch` : independent hue axis and shortest circular path
+- Travel around the hue circle : `mt.color.lerp_oklch` : independent hue axis; shortest path by default, optional fourth argument "long" takes the longer path
 - Construct colors or adjust lightness : `mt.color.from_okhsl` / `mt.color.to_okhsl` : normalized saturation and lightness
 
 OKLab and OKLCH are Cartesian and polar representations of the same base color
@@ -594,7 +594,7 @@ recognised.
 -- @title Falling Letters
 -- @author Mug
 -- @version 1.0
--- @api_level 10
+-- @api_level 11
 -- @input number 1 "Amplitude" default=15.0
 --[[ @description
 What the effect does, in a sentence or two.
@@ -647,7 +647,7 @@ colors, or text the user should control, and do not declare unused slots.
 - `number`: index=1..10; finite default=-1000000..1000000; omitted=0.0
 - `color`: index=1..4; default={r,g,b,a}, channels=0..1; omitted={1,1,1,1}
 - `text`: index=1..2; quoted single-line NUL-free UTF-8 default<=4096 bytes; omitted=""
-- `boolean`: index=1..4; default=true or false; omitted=false (API level 10)
+- `boolean`: index=1..4; default=true or false; omitted=false
 - label: quoted UTF-8, 1..64 bytes
 - label/text escapes: `\"` and `\\` only
 - each type/index pair: at most once
@@ -825,7 +825,7 @@ often in generated scripts.
     (section 5).
 13. Derived colors use the appropriate OKLab-family space: OKLab for mixing,
     OKLCH for hue travel, and OKHSL rather than OKHSV for lightness changes.
-14. A complete new script declares `-- @api_level 10` in its metadata header.
+14. A complete new script declares the target API level in its metadata header.
 15. The motion follows the user's requested mood, restraint and readability
     constraints; a physical metaphor does not override explicit creative intent.
 16. Every secondary movement or optical change supports the main action. Remove
@@ -1016,6 +1016,8 @@ ctx.global.v_align : string [R:pre,layout,path W:pre]
 ctx.global.margins : number[] [R:pre,layout,path W:pre]
  unit=em  base=font size (1.0 = 1 em)
  Per-character margins.
+ctx.global.emoji : MtGlobalEmoji [R:pre,layout,path W:pre]
+ Emoji placement and font settings. Changing any value rebuilds the layout, so avoid animating them every frame.
 ctx.global.position_x : number [R:pre,layout,path W:pre]
  unit=canvas_ratio_position  base=canvas width (0.5 = center)
  Global X position; 0.5 is the canvas center.
@@ -1074,8 +1076,8 @@ ctx.global.fill.transparent : boolean [R:pre,layout,path W:pre]
 
 ```text
 ctx.global.gradient.color_space : string [R:pre,layout,path W:pre]
- values=none|okhsv|okhsl|oklab|linear_rgb|crayon
- Gradient mode; none disables the gradient.
+ values=none|okhsv|okhsl|oklab|linear_rgb|oklch_short|oklch_long|crayon
+ Gradient mode; none disables the gradient. oklch_short / oklch_long interpolate like CSS oklch with shorter / longer hue; crayon draws scribble strokes instead of a gradient.
 ctx.global.gradient.end_color : MtColor [R:pre,layout,path W:pre]
  Gradient end color.
 ctx.global.gradient.midpoint : number [R:pre,layout,path W:pre]
@@ -1132,6 +1134,26 @@ ctx.global.shadow.angle : number [R:pre,layout,path W:pre]
  Global shadow angle in degrees; 0 casts the shadow to the right and positive rotates clockwise (90 = straight down).
 ctx.global.shadow.color : MtColor [R:pre,layout,path W:pre]
  Resolved global shadow color.
+```
+
+### ctx.global.emoji
+
+```text
+ctx.global.emoji.offset_x : number [R:pre,layout,path W:pre]
+ unit=em  neutral=0  base=font size (1.0 = 1 em)
+ Horizontal emoji offset from where the font places it; the advance is unchanged.
+ctx.global.emoji.offset_y : number [R:pre,layout,path W:pre]
+ unit=em  neutral=0  axis=y_up  base=font size (1.0 = 1 em)
+ Vertical emoji offset from where the font places it; positive moves up and the advance is unchanged.
+ctx.global.emoji.scale : number [R:pre,layout,path W:pre]
+ unit=multiplier  neutral=1  range=0.001..+inf
+ Emoji size as if set in a font this many times the text size, advance included.
+ctx.global.emoji.use_custom_font : boolean [R:pre,layout,path W:pre]
+ Whether emoji use font_name instead of the system emoji font.
+ctx.global.emoji.font_name : string [R:pre,layout,path W:pre]
+ Custom emoji font, one of ctx.fonts; kept but ignored while use_custom_font is false. An unknown name falls back to the system emoji font.
+ctx.global.emoji.use_outline : boolean [R:pre,layout,path W:pre]
+ Whether emoji are drawn from the custom font's outlines as ordinary characters; only applies while use_custom_font is true. Glyphs without an outline, such as colour-only ones, draw nothing.
 ```
 
 ### ctx.camera
@@ -1570,27 +1592,27 @@ glyph_declarations:declare(declaration) -> string [R:pre read-only]
  Declare one custom glyph and return its placeholder; path uses Y-down drawing coordinates, while bounds and advances use Y-up layout coordinates.
 ```
 
-### texture
+### ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture
 
 ```text
-texture.use : boolean [R:layout,path W:layout]
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.use : boolean [R:layout,path W:layout]
  Whether this element's own texture is used instead of the inherited one. Ignored on ctx.global.
-texture.type : string [R:pre,layout,path W:pre,layout]
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.type : string [R:pre,layout,path W:pre,layout]
  values=none|water_droplet|air_cushion|glitter|iridescent|faceted|stained_glass|metallic|metallic_2
  Fill material; none paints the plain fill.
-texture.p1 : number [R:pre,layout,path W:pre,layout]
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p1 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
  First shared material control; 0..1 for every type. Its meaning follows texture.type (water_droplet thickness, air_cushion inflation, glitter flake size where 0 removes the flakes, iridescent film thickness, faceted facet count, stained_glass piece size relative to the untransformed character, metallic and metallic_2 polish where 0 is matte and 1 is a mirror). Out-of-range values are folded, never written back.
-texture.p2 : number [R:pre,layout,path W:pre,layout]
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p2 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
  Second shared material control; 0..1 for every type (water_droplet roundness, air_cushion seal width, glitter highlight ratio, iridescent hue range, faceted bevel depth, stained_glass lead width; 0 removes the lead; metallic and metallic_2 relief).
-texture.p3 : number [R:pre,layout,path W:pre,layout]
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p3 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
  Third shared material control; 0..1 for every type (water_droplet gloss, air_cushion wrinkles, glitter flake amount, iridescent strength, faceted polish, stained_glass hue range, metallic reflection contrast, metallic_2 exposure where 0.5 is the neutral studio). Glitter flake amount is 0 for no flakes and 1 for full density; its hue spread is fixed at full range around texture.color. Stained glass hue range spreads from the fill underneath.
-texture.p4 : number [R:pre,layout,path W:pre,layout]
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p4 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
  Fourth shared material control. Light angles (water_droplet, air_cushion, glitter, iridescent, faceted, metallic, metallic_2) are degrees and wrap; stained_glass glow is 0..1 whose midpoint 0.5 is plain glass, above it the panes emit and below it they darken.
-texture.color : MtColor [R:pre,layout,path W:pre,layout]
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.color : MtColor [R:pre,layout,path W:pre,layout]
  Colors what the material adds on top of the fill: its light, the metal colour for glitter, or the lead for stained_glass. White leaves the light as the material makes it, and paints white lead. Iridescent ignores this. Metallic and metallic_2 take it as the lighting colour; the metal's own colour is the fill.
 ```
 
@@ -1751,8 +1773,8 @@ mt.color.to_okhsl(color) -> { hue, saturation, lightness, alpha }
  Convert an RGBA color to { hue, saturation, lightness, alpha } OKHSL components.
 mt.color.lerp_oklab(from, to, t) -> MtColor
  Interpolate two RGBA colors in OKLab space.
-mt.color.lerp_oklch(from, to, t) -> MtColor
- Interpolate two RGBA colors in OKLCH space along the shortest hue path.
+mt.color.lerp_oklch(from, to, t, hueMethod?) -> MtColor
+ Interpolate two RGBA colors in OKLCH space along the short (default) or long hue path.
 mt.color.lerp_okhsv(from, to, t) -> MtColor
  Interpolate two RGBA colors in OKHSV space along the shortest hue path.
 mt.color.lerp_okhsl(from, to, t) -> MtColor
@@ -2354,7 +2376,7 @@ A stable random value determined solely by the `(seed, index, channel)` tuple. B
 ARGS
 - `seed` (`integer`) Value selecting the random sequence. Use the same seed for the same purpose
 - `index` (`integer`) Position within the sequence, such as a character index
-- `channel` (`string` optional) Name separating one use from another. API level 6 or later
+- `channel` (`string` optional) Name separating one use from another.
 
 RET
 - `number` 0–1 -- Random value in `[0, 1)`. The same arguments always produce the same value
@@ -2367,13 +2389,12 @@ The 32-bit hash can theoretically collide and is not suitable for cryptographic 
 
 #### `mt.random_range(seed, index, low, high, channel?)`
 
-Returns the result of `mt.random` mapped to `[low, high)`. In API level 6 or later,
-an optional string `channel` separates random sequences by purpose.
+Returns the result of `mt.random` mapped to `[low, high)`. An optional string `channel` separates random sequences by purpose.
 
 ARGS
 - `seed` / `index` (`integer`) Same as `mt.random`
 - `low` / `high` (`number`) Output range
-- `channel` (`string` optional) Same as `mt.random`. API level 6 or later
+- `channel` (`string` optional) Same as `mt.random`.
 
 RET
 - `number` Same as the output range -- Stable random value in `[low, high)`
@@ -2957,8 +2978,11 @@ from components, `to_*` decomposes a color into a component table, and `lerp*` c
 two colors and `t`. An omitted `alpha`, or a missing `a` in a color passed to `to_*`, becomes `1.0`.
 `hue` uses one full turn as its unit; out-of-range input wraps to `[0, 1)`. No interpolation function
 clamps `t`. OKHSV/OKHSL `saturation`, `value`, and `lightness` inputs are constrained to 0–1.
-`lerp_oklch` / `lerp_okhsv` / `lerp_okhsl` take the shortest hue path, choose the increasing direction
-for an exact half-turn, and inherit the colored endpoint's hue when the other endpoint is achromatic.
+`lerp_oklch` / `lerp_okhsv` / `lerp_okhsl` take the shortest hue path by default and inherit the colored
+endpoint's hue when the other endpoint is achromatic. An exact half-turn preserves the sign of the hue difference.
+`lerp_oklch(from, to, t, "long")` takes the longer hue path; `"short"` or omission
+keeps the shorter path. Equal hues make one increasing revolution with `"long"`, including hues inherited
+from a colored endpoint. Other `hueMethod` values are errors.
 
 - `mt.color.lerp(from, to, t)` — Linearly interpolates RGBA components.
 - `mt.color.from_hsv(hue, saturation, value, alpha?)` — Constructs a color from normalized HSV.
@@ -2973,7 +2997,7 @@ for an exact half-turn, and inherit the colored endpoint's hue when the other en
 - `mt.color.from_okhsl(hue, saturation, lightness, alpha?)` — Creates a color from gamut-normalized OKHSL.
 - `mt.color.to_okhsl(color)` — Converts to `{ hue, saturation, lightness, alpha }`. Achromatic hue is 0.
 - `mt.color.lerp_oklab(from, to, t)` — Interpolates in Cartesian OKLab coordinates.
-- `mt.color.lerp_oklch(from, to, t)` — Interpolates in OKLCH along the shortest hue path.
+- `mt.color.lerp_oklch(from, to, t, hueMethod?)` — Interpolates in OKLCH. `hueMethod` is `"short"` (default) or `"long"`.
 - `mt.color.lerp_okhsv(from, to, t)` — Interpolates in OKHSV along the shortest hue path.
 - `mt.color.lerp_okhsl(from, to, t)` — Interpolates in OKHSL along the shortest hue path.
 
@@ -3322,7 +3346,7 @@ The bounds table has the following fields. All coordinate systems are Y-up.
 
 ERRORS
 
-Selecting all targets by omitting `targets` is available from API level 6.
+Selecting all targets by omitting `targets` is available.
 `targetType = "character"` selects every character, while `"part"` selects
 every part. An empty table `{}` does not select all; as before, it selects
 nothing and returns `nil`.
