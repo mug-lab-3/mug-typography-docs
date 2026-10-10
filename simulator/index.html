@@ -10,8 +10,8 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#252526">
-<meta name="mt-simulator-build" content="2f72b86acb5d306a">
-<meta name="mt-prelude-url" content="prelude-805aa1b1e1a9.lua">
+<meta name="mt-simulator-build" content="5f14a2a100250aeb">
+<meta name="mt-prelude-url" content="prelude-522c011b6b98.lua">
 <meta name="mt-prelude-drawing-path-url" content="prelude_drawing_path-3e4364d9ad16.lua">
 <link rel="stylesheet" href="style-00bee200bbaa.css">
 <link rel="stylesheet" href="web-main-EZTS765H.css">
@@ -517,13 +517,11 @@
   .doc-viewer-body pre { background: #111; padding: 8px; overflow-x: auto; }
   .doc-viewer-body code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
 
-  /* Sample browser: a dedicated overlay (rather than the generic
-     doc-viewer one) since it needs a search box + category tabs above the
-     scrollable body, not just a single scrolling region. */
+  /* Navigation and results scroll independently inside the sample browser. */
   .sample-browser-panel {
     background: #1e1e1e;
     color: #d4d4d4;
-    width: min(760px, 90vw);
+    width: min(1100px, 94vw);
     height: 80vh;
     border-radius: 6px;
     display: flex;
@@ -553,25 +551,45 @@
     font-size: 13px;
     padding: 6px 10px;
   }
-  .sample-browser-tabs {
-    display: flex;
-    gap: 4px;
-    padding: 0 12px;
-    border-bottom: 1px solid #333;
+  .sample-browser-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 270px minmax(0, 1fr);
   }
-  .sample-browser-tab {
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: #999;
+  .sample-browser-tree {
+    overflow: auto;
+    padding: 10px;
+    border-right: 1px solid #333;
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 8px 10px;
-    cursor: pointer;
   }
-  .sample-browser-tab:hover { color: #d4d4d4; }
-  .sample-browser-tab.active { color: var(--mt-accent); border-bottom-color: var(--mt-accent); }
+  .sample-browser-tree summary { cursor: pointer; white-space: nowrap; }
+  .sample-tree-select {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    padding: 5px 6px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: inherit;
+  }
+  .sample-tree-select:hover { background: #2a2d2e; }
+  .sample-tree-select[aria-current="true"] { background: #343b43; color: var(--mt-accent); }
+  .sample-tree-children { margin-left: 12px; }
+  .sample-tree-leaf { display: block; width: 100%; }
+  .sample-browser-list-header { grid-column: 1 / -1; color: #bbb; padding: 4px; }
+  button.sample-browser-list-header { background: #2d2d2d; border: 1px solid #444; cursor: pointer; }
+  .sample-detail { grid-column: 1 / -1; }
+  .sample-card-open { background: #343b43; color: #d4d4d4; border: 1px solid #555; border-radius: 3px; padding: 6px; cursor: pointer; margin-top: auto; }
+  .sample-card-open:disabled { opacity: 0.5; cursor: wait; }
+  .sample-card-error { color: #f14c4c; }
+  .sample-browser-tree button:focus-visible, .sample-browser-tree summary:focus-visible,
+  .sample-card button:focus-visible { outline: 2px solid var(--mt-accent); outline-offset: 1px; }
+  @media (max-width: 650px) {
+    .sample-browser-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(100px, 30%) minmax(0, 1fr); }
+    .sample-browser-tree { border-right: 0; border-bottom: 1px solid #333; }
+  }
   .sample-browser-grid {
     flex: 1;
     overflow-y: auto;
@@ -587,19 +605,89 @@
     border-radius: 6px;
     padding: 10px 12px;
     text-align: left;
-    cursor: pointer;
     color: #d4d4d4;
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
   .sample-card:hover { border-color: var(--mt-accent); background: #2a2d2e; }
-  .sample-card:focus-visible { outline: 1px solid var(--mt-accent); outline-offset: 1px; }
-  /* A gallery script is fetched when its card is opened; this marks the
-     card whose fetch failed so the click does not just appear to do nothing. */
+  /* Failed editor loads keep their retry button available. */
   .sample-card-failed { border-color: #f14c4c; }
   /* The aspect ratio is reserved up front so the card keeps its size while
      the thumbnail is still loading (see createThumbnailObserver). */
+  .sample-live-preview { width: 100%; }
+  .sample-live-viewport {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    overflow: hidden;
+    background: #111;
+    font-size: 12px;
+    color: #aaa;
+    border-radius: 4px;
+  }
+  .sample-live-canvas {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  .sample-live-canvas img { width: 100%; height: 100%; object-fit: contain; }
+  .sample-live-controls-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    padding: 22px 10px 12px;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+  }
+  .sample-live-viewport[data-controls-visible="true"] .sample-live-controls-overlay { opacity: 1; pointer-events: auto; }
+  .sample-live-viewport:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; background: #000; }
+  .sample-live-start { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(0, 0, 0, 0.65); color: #fff; }
+  .sample-live-start svg { width: 28px; height: 28px; }
+  .sample-live-controls { display: flex; align-items: center; gap: 6px; }
+  .sample-live-controls button {
+    color: #fff;
+    background: transparent;
+    border: 0;
+    border-radius: 3px;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    cursor: pointer;
+  }
+  .sample-live-controls button svg { width: 22px; height: 22px; }
+  .sample-live-controls button[hidden] { display: none; }
+  .sample-live-fullscreen { margin-left: auto; }
+  .sample-live-controls button:hover { background: rgba(255, 255, 255, 0.15); }
+  .sample-live-controls button:disabled { opacity: 0.45; cursor: default; }
+  .sample-live-status { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1; font-size: 11px; overflow-wrap: anywhere; background: rgba(0, 0, 0, 0.7); }
+  .sample-live-status:empty { display: none; }
+  .sample-live-status[role="alert"] { color: #ff9d9d; }
+  .sample-live-time { color: #fff; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sample-live-preview input[type="range"] { appearance: none; display: block; width: 100%; height: 12px; margin: 6px 0 0; background: transparent; cursor: pointer; }
+  .sample-live-preview input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #eee var(--sample-preview-progress, 0%), #666 var(--sample-preview-progress, 0%)); }
+  .sample-live-preview input[type="range"]::-webkit-slider-thumb { appearance: none; width: 10px; height: 10px; margin-top: -3px; background: #fff; border-radius: 50%; }
+  .sample-live-preview input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: #666; }
+  .sample-live-preview input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: #eee; }
+  .sample-live-preview input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 0; background: #fff; border-radius: 50%; }
+  .sample-live-preview input[type="range"]:focus-visible { outline: 2px solid var(--mt-accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .sample-live-controls-overlay { transition: none; } }
+  .sample-detail .sample-live-preview { width: min(100%, 640px); align-self: center; }
   .sample-card-preview {
     position: relative;
     display: block;
@@ -623,6 +711,7 @@
     align-items: center;
     justify-content: center;
     font-size: 20px;
+    border: 0;
     color: #fff;
     background: rgba(0, 0, 0, 0.35);
     cursor: pointer;
@@ -636,6 +725,12 @@
   }
   .sample-card-source:hover { text-decoration: underline; }
   .sample-card-name {
+    background: transparent;
+    color: inherit;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
     font-size: 13px;
     font-weight: 600;
     word-break: break-word;
@@ -921,10 +1016,10 @@
     <div class="scripting-check-body" id="scripting-check-body"></div>
   </div>
 </div>
-<div class="doc-viewer-overlay" id="sample-browser-overlay">
+<div class="doc-viewer-overlay" id="sample-browser-overlay" role="dialog" aria-modal="true" aria-labelledby="sample-browser-title">
   <div class="sample-browser-panel">
     <div class="sample-browser-header">
-      <strong data-i18n="overlay.browseSamples">Browse Samples</strong>
+      <strong id="sample-browser-title" data-i18n="overlay.browseSamples">Browse Samples</strong>
       <button id="close-sample-browser-button" class="overlay-close-button" type="button" aria-label="Close" title="Close">✕</button>
     </div>
     <div class="sample-browser-controls">
@@ -936,8 +1031,10 @@
         autocomplete="off"
       >
     </div>
-    <div class="sample-browser-tabs" id="sample-browser-tabs"></div>
-    <div class="sample-browser-grid" id="sample-browser-grid"></div>
+    <div class="sample-browser-body">
+      <nav class="sample-browser-tree" id="sample-browser-tree"></nav>
+      <div class="sample-browser-grid" id="sample-browser-grid"></div>
+    </div>
   </div>
 </div>
 <div class="doc-viewer-overlay" id="licenses-viewer-overlay">
@@ -958,6 +1055,6 @@
     <div class="doc-viewer-body" id="webmcp-guide-body" style="padding: 16px; line-height: 1.6; font-size: 13px; color: #d4d4d4;"></div>
   </div>
 </div>
-<script type="module" src="web-main-2SSNY5EC.js"></script>
+<script type="module" src="web-main-XB5LJQJY.js"></script>
 </body>
 </html>

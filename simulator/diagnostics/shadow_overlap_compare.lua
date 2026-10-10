@@ -5,7 +5,7 @@
 -- @title Shadow Overlap Compare
 -- @author Mug
 -- @version 1.0
--- @api_level 3
+-- @api_level 12
 --[[ @description
 Diagnostic: forces adjacent characters to overlap heavily while each one
 carries a different, semi-transparent individual shadow color
@@ -34,7 +34,7 @@ All other characters (5+) are pushed off-canvas so only the two pairs are
 visible and easy to screenshot/crop.
 ]]
 
-local kShadowDistance = 3.0
+local kShadowDistance = 0.3
 local kShadowAngle = 45.0
 
 -- Alpha < 1.0 on every color: see the OnPreLayout comment above for why this
@@ -49,7 +49,7 @@ local kColorYellow = { r = 1.0, g = 0.85, b = 0.1, a = 0.55 }
 -- offset_x/offset_y are DISPLACEMENTS normalized to canvas width/height (0.5
 -- = no displacement), not to the character's own size, so the pull-back is
 -- scaled by each character's own geometry.advance_x rather than a fixed
--- canvas-relative guess (see reference/15_mt_random_noise.lua).
+-- canvas-relative guess (see reference/RRN002_mt_random_noise.lua).
 local kOverlapFraction = 0.55
 
 function OnPreLayout(ctx)
