@@ -109,8 +109,94 @@ function typed_array_from_set(setPtr) {
 	exports.hb_set_next_many(setPtr, -1, arrayPtr, setCount);
 	return Module.HEAPU32.subarray(arrayOffset, arrayOffset + setCount);
 }
+const callbackData = [void 0];
+const freeCallbackData = [];
+function register_callback_data_pointer(data) {
+	if (data === void 0) return 0;
+	const dataPtr = freeCallbackData.pop() ?? callbackData.length;
+	callbackData[dataPtr] = data;
+	return dataPtr;
+}
+function get_callback_data(dataPtr) {
+	return callbackData[dataPtr];
+}
+function remove_callback_data_pointer(dataPtr) {
+	if (dataPtr === 0) return;
+	callbackData[dataPtr] = void 0;
+	freeCallbackData.push(dataPtr);
+}
+function color_from_int(color) {
+	return {
+		red: color >> 8 & 255,
+		green: color >> 16 & 255,
+		blue: color >> 24 & 255,
+		alpha: color & 255
+	};
+}
+function color_to_int(color) {
+	return (color.red << 8 | color.green << 16 | color.blue << 24 | color.alpha) >>> 0;
+}
 //#endregion
 //#region src/types.ts
+/** Flags that describe the properties of a color palette. */
+const ColorPaletteFlags = {
+	DEFAULT: 0,
+	USABLE_WITH_LIGHT_BACKGROUND: 1,
+	USABLE_WITH_DARK_BACKGROUND: 2
+};
+/**
+* The values of this enumeration determine how color values outside the minimum
+* and maximum defined offset on a {@link ColorLine} are determined.
+*
+* See the OpenType spec
+* [COLR](https://learn.microsoft.com/en-us/typography/opentype/spec/colr) section
+* for details.
+*/
+const PaintExtend = {
+	PAD: 0,
+	REPEAT: 1,
+	REFLECT: 2
+};
+/**
+* The values of this enumeration describe the compositing modes that can be used
+* when combining temporary redirected drawing with the backdrop.
+*
+* See the OpenType spec
+* [COLR](https://learn.microsoft.com/en-us/typography/opentype/spec/colr) section
+* for details.
+*/
+const PaintCompositeMode = {
+	CLEAR: 0,
+	SRC: 1,
+	DEST: 2,
+	SRC_OVER: 3,
+	DEST_OVER: 4,
+	SRC_IN: 5,
+	DEST_IN: 6,
+	SRC_OUT: 7,
+	DEST_OUT: 8,
+	SRC_ATOP: 9,
+	DEST_ATOP: 10,
+	XOR: 11,
+	PLUS: 12,
+	SCREEN: 13,
+	OVERLAY: 14,
+	DARKEN: 15,
+	LIGHTEN: 16,
+	COLOR_DODGE: 17,
+	COLOR_BURN: 18,
+	HARD_LIGHT: 19,
+	SOFT_LIGHT: 20,
+	DIFFERENCE: 21,
+	EXCLUSION: 22,
+	MULTIPLY: 23,
+	HSL_HUE: 24,
+	HSL_SATURATION: 25,
+	HSL_COLOR: 26,
+	HSL_LUMINOSITY: 27
+};
+/** Flags for {@link AxisInfo}. */
+const AxisFlags = { HIDDEN: 1 };
 const GlyphFlag = {
 	UNSAFE_TO_BREAK: 1,
 	UNSAFE_TO_CONCAT: 2,
@@ -128,9 +214,10 @@ var Blob = class {
 	* @param data Binary font data.
 	*/
 	constructor(data) {
-		const blobPtr = exports.malloc(data.byteLength);
-		Module.HEAPU8.set(new Uint8Array(data), blobPtr);
-		this.ptr = exports.hb_blob_create(blobPtr, data.byteLength, 2, blobPtr, freeFuncPtr);
+		const array = data instanceof Uint8Array ? data : new Uint8Array(data);
+		const blobPtr = exports.malloc(array.byteLength);
+		Module.HEAPU8.set(array, blobPtr);
+		this.ptr = exports.hb_blob_create(blobPtr, array.byteLength, 2, blobPtr, freeFuncPtr);
 		track(this, exports.hb_blob_destroy);
 	}
 };
@@ -170,7 +257,7 @@ var Face = class {
 	}
 	/**
 	* Return variation axis infos.
-	* @returns A dictionary mapping axis tags to {min, default, max} values.
+	* @returns A dictionary mapping axis tags to {@link AxisInfo} values.
 	*/
 	getAxisInfos() {
 		const sp = Module.stackSave();
@@ -180,11 +267,16 @@ var Face = class {
 		exports.hb_ot_var_get_axis_infos(this.ptr, 0, c, axis);
 		const result = {};
 		Array.from({ length: Module.HEAPU32[c / 4] }).forEach((_, i) => {
-			result[hb_untag(Module.HEAPU32[axis / 4 + i * 8 + 1])] = {
+			const info = {
+				axisIndex: Module.HEAPU32[axis / 4 + i * 8],
+				tag: hb_untag(Module.HEAPU32[axis / 4 + i * 8 + 1]),
+				nameId: Module.HEAPU32[axis / 4 + i * 8 + 2],
+				flags: Module.HEAPU32[axis / 4 + i * 8 + 3],
 				min: Module.HEAPF32[axis / 4 + i * 8 + 4],
 				default: Module.HEAPF32[axis / 4 + i * 8 + 5],
 				max: Module.HEAPF32[axis / 4 + i * 8 + 6]
 			};
+			result[info.tag] = info;
 		});
 		Module.stackRestore(sp);
 		return result;
@@ -403,6 +495,208 @@ var Face = class {
 		Module.stackRestore(sp);
 		return names;
 	}
+	/**
+	* Tests whether a face includes a `CPAL` color-palette table.
+	* @returns `true` if data found, `false` otherwise.
+	*/
+	hasColorPalettes() {
+		return !!exports.hb_ot_color_has_palettes(this.ptr);
+	}
+	/**
+	* Fetches the color palettes in the face's `CPAL` table.
+	* @returns An array of the face's {@link ColorPalette | color palettes}.
+	*/
+	getColorPalettes() {
+		const count = exports.hb_ot_color_palette_get_count(this.ptr);
+		const palettes = [];
+		const sp = Module.stackSave();
+		const countPtr = Module.stackAlloc(4);
+		const colorsPtr = Module.stackAlloc(512);
+		for (let i = 0; i < count; i++) {
+			const colors = [];
+			let startOffset = 0;
+			let colorCount = 128;
+			while (colorCount === 128) {
+				Module.HEAPU32[countPtr / 4] = colorCount;
+				exports.hb_ot_color_palette_get_colors(this.ptr, i, startOffset, countPtr, colorsPtr);
+				colorCount = Module.HEAPU32[countPtr / 4];
+				for (let j = 0; j < colorCount; j++) {
+					const color = color_from_int(Module.HEAPU32[colorsPtr / 4 + j]);
+					const nameId = exports.hb_ot_color_palette_color_get_name_id(this.ptr, startOffset + j);
+					if (nameId != HB_OT_NAME_ID_INVALID) color.nameId = nameId;
+					colors.push(color);
+				}
+				startOffset += colorCount;
+			}
+			const palette = {
+				colors,
+				flags: exports.hb_ot_color_palette_get_flags(this.ptr, i)
+			};
+			const nameId = exports.hb_ot_color_palette_get_name_id(this.ptr, i);
+			if (nameId != HB_OT_NAME_ID_INVALID) palette.nameId = nameId;
+			palettes.push(palette);
+		}
+		Module.stackRestore(sp);
+		return palettes;
+	}
+	/**
+	* Tests whether a face includes a `COLR` table with data according to COLRv0.
+	* @returns `true` if data found, `false` otherwise.
+	*/
+	hasColorLayers() {
+		return !!exports.hb_ot_color_has_layers(this.ptr);
+	}
+	/**
+	* Fetches a list of all color layers for the specified glyph index in the
+	* specified face.
+	* @param glyph The glyph index to query.
+	* @returns An array of the glyph's {@link ColorLayer | color layers}.
+	*/
+	getGlyphColorLayers(glyph) {
+		const layers = [];
+		const sp = Module.stackSave();
+		const countPtr = Module.stackAlloc(4);
+		const layersPtr = Module.stackAlloc(1024);
+		let startOffset = 0;
+		let layerCount = 128;
+		while (layerCount === 128) {
+			Module.HEAPU32[countPtr / 4] = layerCount;
+			exports.hb_ot_color_glyph_get_layers(this.ptr, glyph, startOffset, countPtr, layersPtr);
+			layerCount = Module.HEAPU32[countPtr / 4];
+			for (let i = 0; i < layerCount; i++) {
+				const o = layersPtr / 4 + i * 2;
+				const layer = { glyph: Module.HEAPU32[o] };
+				const colorIndex = Module.HEAPU32[o + 1];
+				if (colorIndex != 65535) layer.colorIndex = colorIndex;
+				layers.push(layer);
+			}
+			startOffset += layerCount;
+		}
+		Module.stackRestore(sp);
+		return layers;
+	}
+	/**
+	* Tests whether a face includes a `COLR` table with data according to COLRv1.
+	* @returns `true` if data found, `false` otherwise.
+	*/
+	hasColorPaint() {
+		return !!exports.hb_ot_color_has_paint(this.ptr);
+	}
+	/**
+	* Tests whether a face includes COLRv1 paint data for a glyph.
+	* @param glyph The glyph index to query.
+	* @returns `true` if data found, `false` otherwise.
+	*/
+	glyphHasColorPaint(glyph) {
+		return !!exports.hb_ot_color_glyph_has_paint(this.ptr, glyph);
+	}
+	/**
+	* Tests whether a face has PNG glyph images (either in `CBDT` or `sbix`
+	* tables).
+	* @returns `true` if data found, `false` otherwise.
+	*/
+	hasColorPng() {
+		return !!exports.hb_ot_color_has_png(this.ptr);
+	}
+};
+//#endregion
+//#region src/draw-funcs.ts
+/**
+* An object representing
+* {@link https://harfbuzz.github.io/harfbuzz-hb-draw.html | HarfBuzz draw functions}.
+*
+* Glyph draw callbacks.
+*
+* The {@link DrawFuncs.setMoveToFunc | move-to},
+* {@link DrawFuncs.setLineToFunc | line-to} and
+* {@link DrawFuncs.setCubicToFunc | cubic-to} callbacks are necessary to be
+* defined, but we translate {@link DrawFuncs.setQuadraticToFunc | quadratic-to}
+* calls to cubic-to if the callback isn't defined.
+*/
+var DrawFuncs = class {
+	constructor() {
+		this.funcPtrs = [];
+		this.userDataPtrs = [];
+		this.ptr = exports.hb_draw_funcs_create();
+		const ptr = this.ptr;
+		const funcPtrs = this.funcPtrs;
+		const userDataPtrs = this.userDataPtrs;
+		registry.register(this, () => {
+			exports.hb_draw_funcs_destroy(ptr);
+			for (const ptr of funcPtrs) Module.removeFunction(ptr);
+			for (const ptr of userDataPtrs) remove_callback_data_pointer(ptr);
+		});
+	}
+	/**
+	* Sets move-to callback to the draw functions object.
+	* @param func The move-to callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setMoveToFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((dfuncs, draw_data, draw_state, toX, toY, user_data) => {
+			func(toX, toY, get_callback_data(draw_data), get_callback_data(user_data));
+		}, "viiiffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_draw_funcs_set_move_to_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets line-to callback to the draw functions object.
+	* @param func The line-to callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setLineToFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((dfuncs, draw_data, draw_state, toX, toY, user_data) => {
+			func(toX, toY, get_callback_data(draw_data), get_callback_data(user_data));
+		}, "viiiffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_draw_funcs_set_line_to_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets quadratic-to callback to the draw functions object.
+	* @param func The quadratic-to callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setQuadraticToFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((dfuncs, draw_data, draw_state, cX, cY, toX, toY, user_data) => {
+			func(cX, cY, toX, toY, get_callback_data(draw_data), get_callback_data(user_data));
+		}, "viiiffffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_draw_funcs_set_quadratic_to_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets cubic-to callback to the draw functions object.
+	* @param func The cubic-to callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setCubicToFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((dfuncs, draw_data, draw_state, c1X, c1Y, c2X, c2Y, toX, toY, user_data) => {
+			func(c1X, c1Y, c2X, c2Y, toX, toY, get_callback_data(draw_data), get_callback_data(user_data));
+		}, "viiiffffffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_draw_funcs_set_cubic_to_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets close-path callback to the draw functions object.
+	* @param func The close-path callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setClosePathFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((dfuncs, draw_data, draw_state, user_data) => {
+			func(get_callback_data(draw_data), get_callback_data(user_data));
+		}, "viiii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_draw_funcs_set_close_path_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
 };
 //#endregion
 //#region src/font.ts
@@ -440,6 +734,77 @@ const MetricsTag = {
 	UNDERLINE_SIZE: hb_tag("unds"),
 	UNDERLINE_OFFSET: hb_tag("undo")
 };
+let pathDrawFuncs;
+function getPathDrawFuncs() {
+	if (!pathDrawFuncs) {
+		pathDrawFuncs = new DrawFuncs();
+		pathDrawFuncs.setMoveToFunc((x, y, path) => {
+			path.push(`M${x},${y}`);
+		});
+		pathDrawFuncs.setLineToFunc((x, y, path) => {
+			path.push(`L${x},${y}`);
+		});
+		pathDrawFuncs.setCubicToFunc((c1x, c1y, c2x, c2y, x, y, path) => {
+			path.push(`C${c1x},${c1y} ${c2x},${c2y} ${x},${y}`);
+		});
+		pathDrawFuncs.setQuadraticToFunc((cx, cy, x, y, path) => {
+			path.push(`Q${cx},${cy} ${x},${y}`);
+		});
+		pathDrawFuncs.setClosePathFunc((path) => {
+			path.push("Z");
+		});
+	}
+	return pathDrawFuncs;
+}
+let jsonDrawFuncs;
+function getJsonDrawFuncs() {
+	if (!jsonDrawFuncs) {
+		jsonDrawFuncs = new DrawFuncs();
+		jsonDrawFuncs.setMoveToFunc((x, y, commands) => {
+			commands.push({
+				type: "M",
+				values: [x, y]
+			});
+		});
+		jsonDrawFuncs.setLineToFunc((x, y, commands) => {
+			commands.push({
+				type: "L",
+				values: [x, y]
+			});
+		});
+		jsonDrawFuncs.setCubicToFunc((c1x, c1y, c2x, c2y, x, y, commands) => {
+			commands.push({
+				type: "C",
+				values: [
+					c1x,
+					c1y,
+					c2x,
+					c2y,
+					x,
+					y
+				]
+			});
+		});
+		jsonDrawFuncs.setQuadraticToFunc((cx, cy, x, y, commands) => {
+			commands.push({
+				type: "Q",
+				values: [
+					cx,
+					cy,
+					x,
+					y
+				]
+			});
+		});
+		jsonDrawFuncs.setClosePathFunc((commands) => {
+			commands.push({
+				type: "Z",
+				values: []
+			});
+		});
+	}
+	return jsonDrawFuncs;
+}
 /**
 * An object representing a {@link https://harfbuzz.github.io/harfbuzz-hb-font.html | HarfBuzz font}.
 * A font represents a face at a specific size and with certain other
@@ -448,25 +813,12 @@ const MetricsTag = {
 */
 var Font = class Font {
 	constructor(arg) {
-		this.drawPtrs = { pathBuffer: "" };
 		if (typeof arg === "number") this.ptr = exports.hb_font_reference(arg);
 		else {
 			this.ptr = exports.hb_font_create(arg.ptr);
 			this._face = arg;
 		}
-		const ptr = this.ptr;
-		const drawState = this.drawPtrs;
-		registry.register(this, () => {
-			exports.hb_font_destroy(ptr);
-			if (drawState.drawFuncsPtr) {
-				exports.hb_draw_funcs_destroy(drawState.drawFuncsPtr);
-				Module.removeFunction(drawState.moveToPtr);
-				Module.removeFunction(drawState.lineToPtr);
-				Module.removeFunction(drawState.cubicToPtr);
-				Module.removeFunction(drawState.quadToPtr);
-				Module.removeFunction(drawState.closePathPtr);
-			}
-		});
+		track(this, exports.hb_font_destroy);
 	}
 	/** The {@link Face} associated with this font. */
 	get face() {
@@ -527,43 +879,134 @@ var Font = class Font {
 		return name;
 	}
 	/**
+	* Draws the outline that corresponds to a glyph in the specified font.
+	*
+	* The outline is returned by way of calls to the callbacks of the `drawFuncs`
+	* object, with `drawData` passed to them.
+	* @param glyphId The glyph ID.
+	* @param drawFuncs The {@link DrawFuncs} to draw to.
+	* @param drawData User data to pass to draw callbacks.
+	*/
+	drawGlyph(glyphId, drawFuncs, drawData) {
+		const drawDataPtr = register_callback_data_pointer(drawData);
+		try {
+			exports.hb_font_draw_glyph(this.ptr, glyphId, drawFuncs.ptr, drawDataPtr);
+		} finally {
+			remove_callback_data_pointer(drawDataPtr);
+		}
+	}
+	/**
+	* Draws the outline that corresponds to a glyph in the specified font.
+	*
+	* This is a newer name for {@link Font.drawGlyph}, that returns `false` if the
+	* font has no outlines for the glyph.
+	*
+	* The outline is returned by way of calls to the callbacks of the `drawFuncs`
+	* object, with `drawData` passed to them.
+	* @param glyphId The glyph ID.
+	* @param drawFuncs The {@link DrawFuncs} to draw to.
+	* @param drawData User data to pass to draw callbacks.
+	* @returns `true` if the glyph was drawn, `false` otherwise.
+	*/
+	drawGlyphOrFail(glyphId, drawFuncs, drawData) {
+		const drawDataPtr = register_callback_data_pointer(drawData);
+		try {
+			return !!exports.hb_font_draw_glyph_or_fail(this.ptr, glyphId, drawFuncs.ptr, drawDataPtr);
+		} finally {
+			remove_callback_data_pointer(drawDataPtr);
+		}
+	}
+	/**
+	* Paints the glyph. This function is similar to {@link Font.paintGlyphOrFail},
+	* but if painting a color glyph failed, it will fall back to painting an
+	* outline monochrome glyph.
+	*
+	* The painting instructions are returned by way of calls to the callbacks of
+	* the `paintFuncs` object, with `paintData` passed to them.
+	*
+	* If the font has color palettes, then `paletteIndex` selects the palette to
+	* use. If the font only has one palette, this will be 0.
+	* @param glyphId The glyph ID.
+	* @param paintFuncs The {@link PaintFuncs} to paint with.
+	* @param paintData User data to pass to paint callbacks.
+	* @param paletteIndex The index of the font's color palette to use.
+	* @param foreground The foreground color, unpremultiplied.
+	*/
+	paintGlyph(glyphId, paintFuncs, paintData, paletteIndex = 0, foreground = {
+		red: 0,
+		green: 0,
+		blue: 0,
+		alpha: 255
+	}) {
+		const paintDataPtr = register_callback_data_pointer(paintData);
+		try {
+			exports.hb_font_paint_glyph(this.ptr, glyphId, paintFuncs.ptr, paintDataPtr, paletteIndex, color_to_int(foreground));
+		} finally {
+			remove_callback_data_pointer(paintDataPtr);
+		}
+	}
+	/**
+	* Paints a color glyph.
+	*
+	* Succeeds if the glyph has color paint layers (COLRv0), a color paint graph
+	* (COLRv1), or a bitmap image that the font's callbacks render successfully.
+	* Returns `false` if the font has no color data for the glyph; the client can
+	* then fall back to {@link Font.drawGlyphOrFail} for the monochrome outline.
+	*
+	* The painting instructions are returned by way of calls to the callbacks of
+	* the `paintFuncs` object, with `paintData` passed to them.
+	*
+	* If the font has color palettes, then `paletteIndex` selects the palette to
+	* use. If the font only has one palette, this will be 0.
+	* @param glyphId The glyph ID.
+	* @param paintFuncs The {@link PaintFuncs} to paint with.
+	* @param paintData User data to pass to paint callbacks.
+	* @param paletteIndex The index of the font's color palette to use.
+	* @param foreground The foreground color, unpremultiplied.
+	* @returns `true` if the glyph was painted, `false` otherwise.
+	*/
+	paintGlyphOrFail(glyphId, paintFuncs, paintData, paletteIndex = 0, foreground = {
+		red: 0,
+		green: 0,
+		blue: 0,
+		alpha: 255
+	}) {
+		const paintDataPtr = register_callback_data_pointer(paintData);
+		try {
+			return !!exports.hb_font_paint_glyph_or_fail(this.ptr, glyphId, paintFuncs.ptr, paintDataPtr, paletteIndex, color_to_int(foreground));
+		} finally {
+			remove_callback_data_pointer(paintDataPtr);
+		}
+	}
+	/**
+	* Fetches the PNG image for a glyph.
+	*
+	* To get an optimally sized PNG blob, the PPEM values must be set on the font.
+	* If PPEM is unset, the blob returned will be the largest PNG available.
+	* @param glyphId A glyph index.
+	* @returns The PNG image for the glyph, or `undefined` if the glyph has no PNG
+	* image.
+	*/
+	getGlyphColorPng(glyphId) {
+		const blob = exports.hb_ot_color_glyph_reference_png(this.ptr, glyphId);
+		const length = exports.hb_blob_get_length(blob);
+		let png;
+		if (length) {
+			const dataPtr = exports.hb_blob_get_data(blob, 0);
+			png = Module.HEAPU8.slice(dataPtr, dataPtr + length);
+		}
+		exports.hb_blob_destroy(blob);
+		return png;
+	}
+	/**
 	* Return a glyph as an SVG path string.
 	* @param glyphId ID of the requested glyph in the font.
 	* @returns SVG path data string.
 	*/
 	glyphToPath(glyphId) {
-		const ds = this.drawPtrs;
-		if (!ds.drawFuncsPtr) {
-			const moveTo = (dfuncs, draw_data, draw_state, to_x, to_y, user_data) => {
-				ds.pathBuffer += `M${to_x},${to_y}`;
-			};
-			const lineTo = (dfuncs, draw_data, draw_state, to_x, to_y, user_data) => {
-				ds.pathBuffer += `L${to_x},${to_y}`;
-			};
-			const cubicTo = (dfuncs, draw_data, draw_state, c1_x, c1_y, c2_x, c2_y, to_x, to_y, user_data) => {
-				ds.pathBuffer += `C${c1_x},${c1_y} ${c2_x},${c2_y} ${to_x},${to_y}`;
-			};
-			const quadTo = (dfuncs, draw_data, draw_state, c_x, c_y, to_x, to_y, user_data) => {
-				ds.pathBuffer += `Q${c_x},${c_y} ${to_x},${to_y}`;
-			};
-			const closePath = (dfuncs, draw_data, draw_state, user_data) => {
-				ds.pathBuffer += "Z";
-			};
-			ds.moveToPtr = Module.addFunction(moveTo, "viiiffi");
-			ds.lineToPtr = Module.addFunction(lineTo, "viiiffi");
-			ds.cubicToPtr = Module.addFunction(cubicTo, "viiiffffffi");
-			ds.quadToPtr = Module.addFunction(quadTo, "viiiffffi");
-			ds.closePathPtr = Module.addFunction(closePath, "viiii");
-			ds.drawFuncsPtr = exports.hb_draw_funcs_create();
-			exports.hb_draw_funcs_set_move_to_func(ds.drawFuncsPtr, ds.moveToPtr, 0, 0);
-			exports.hb_draw_funcs_set_line_to_func(ds.drawFuncsPtr, ds.lineToPtr, 0, 0);
-			exports.hb_draw_funcs_set_cubic_to_func(ds.drawFuncsPtr, ds.cubicToPtr, 0, 0);
-			exports.hb_draw_funcs_set_quadratic_to_func(ds.drawFuncsPtr, ds.quadToPtr, 0, 0);
-			exports.hb_draw_funcs_set_close_path_func(ds.drawFuncsPtr, ds.closePathPtr, 0, 0);
-		}
-		ds.pathBuffer = "";
-		exports.hb_font_draw_glyph(this.ptr, glyphId, ds.drawFuncsPtr, 0);
-		return ds.pathBuffer;
+		const path = [];
+		this.drawGlyph(glyphId, getPathDrawFuncs(), path);
+		return path.join("");
 	}
 	/**
 	* Return glyph horizontal advance.
@@ -705,13 +1148,9 @@ var Font = class Font {
 	* @returns An array of path segment objects with type and values.
 	*/
 	glyphToJson(glyphId) {
-		return this.glyphToPath(glyphId).replace(/([MLQCZ])/g, "|$1 ").split("|").filter((x) => x.length).map((x) => {
-			const [type, ...values] = x.split(/[ ,]/g).filter((s) => s.length);
-			return {
-				type,
-				values: values.map(Number)
-			};
-		});
+		const commands = [];
+		this.drawGlyph(glyphId, getJsonDrawFuncs(), commands);
+		return commands;
 	}
 	/**
 	* Set the font's scale factor, affecting the position values returned from
@@ -1047,6 +1486,260 @@ var FontFuncs = class {
 			return 0;
 		}, "ipppp");
 		exports.hb_font_funcs_set_font_v_extents_func(this.ptr, funcPtr, 0, 0);
+	}
+};
+//#endregion
+//#region src/paint-funcs.ts
+function decode_color_line(colorLinePtr) {
+	const extend = exports.hb_color_line_get_extend(colorLinePtr);
+	const colorStops = [];
+	const sp = Module.stackSave();
+	const countPtr = Module.stackAlloc(4);
+	const stopsPtr = Module.stackAlloc(1536);
+	let startOffset = 0;
+	let count = 128;
+	while (count === 128) {
+		Module.HEAPU32[countPtr / 4] = count;
+		exports.hb_color_line_get_color_stops(colorLinePtr, startOffset, countPtr, stopsPtr);
+		count = Module.HEAPU32[countPtr / 4];
+		for (let i = 0; i < count; i++) {
+			const o = (stopsPtr + i * 12) / 4;
+			colorStops.push({
+				offset: Module.HEAPF32[o],
+				isForeground: Module.HEAPU32[o + 1] !== 0,
+				color: color_from_int(Module.HEAPU32[o + 2])
+			});
+		}
+		startOffset += count;
+	}
+	Module.stackRestore(sp);
+	return {
+		extend,
+		colorStops
+	};
+}
+/**
+* An object representing
+* {@link https://harfbuzz.github.io/harfbuzz-hb-paint.html | HarfBuzz paint functions}.
+*
+* Glyph paint callbacks.
+*
+* The callbacks assume that the caller maintains a stack of current transforms,
+* clips and intermediate surfaces, as evidenced by the pairs of push/pop
+* callbacks. The push/pop calls will be properly nested, so it is fine to store
+* the different kinds of object on a single stack.
+*
+* Not all callbacks are required for all kinds of glyphs. For rendering COLRv0
+* or non-color outline glyphs, the gradient callbacks are not needed, and the
+* composite callback only needs to handle simple alpha compositing
+* ({@link PaintCompositeMode.SRC_OVER}).
+*
+* The paint-image callback is only needed for glyphs with image blobs in the
+* CBDT, sbix or SVG tables.
+*
+* The custom-palette-color callback is only necessary if you want to override
+* colors from the font palette with custom colors.
+*/
+var PaintFuncs = class {
+	constructor() {
+		this.funcPtrs = [];
+		this.userDataPtrs = [];
+		this.ptr = exports.hb_paint_funcs_create();
+		const ptr = this.ptr;
+		const funcPtrs = this.funcPtrs;
+		const userDataPtrs = this.userDataPtrs;
+		registry.register(this, () => {
+			exports.hb_paint_funcs_destroy(ptr);
+			for (const ptr of funcPtrs) Module.removeFunction(ptr);
+			for (const ptr of userDataPtrs) remove_callback_data_pointer(ptr);
+		});
+	}
+	/**
+	* Sets the push-transform callback on the paint functions object.
+	* @param func The push-transform callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setPushTransformFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, xx, yx, xy, yy, dx, dy, user) => func(xx, yx, xy, yy, dx, dy, get_callback_data(paintData), get_callback_data(user)), "viiffffffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_push_transform_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the pop-transform callback on the paint functions object.
+	* @param func The pop-transform callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setPopTransformFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, user) => func(get_callback_data(paintData), get_callback_data(user)), "viii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_pop_transform_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the color-glyph callback on the paint functions object.
+	* @param func The color-glyph callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setColorGlyphFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, glyph, fontPtr, user) => func(glyph, new Font(fontPtr), get_callback_data(paintData), get_callback_data(user)) ? 1 : 0, "iiiiii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_color_glyph_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the push-clip-glyph callback on the paint functions object.
+	* @param func The push-clip-glyph callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setPushClipGlyphFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, glyph, fontPtr, user) => func(glyph, new Font(fontPtr), get_callback_data(paintData), get_callback_data(user)), "viiiii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_push_clip_glyph_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the push-clip-rectangle callback on the paint functions object.
+	* @param func The push-clip-rectangle callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setPushClipRectangleFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, xmin, ymin, xmax, ymax, user) => func(xmin, ymin, xmax, ymax, get_callback_data(paintData), get_callback_data(user)), "viiffffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_push_clip_rectangle_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the pop-clip callback on the paint functions object.
+	* @param func The pop-clip callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setPopClipFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, user) => func(get_callback_data(paintData), get_callback_data(user)), "viii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_pop_clip_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the paint-color callback on the paint functions object.
+	* @param func The paint-color callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setColorFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, isForeground, color, user) => func(isForeground !== 0, color_from_int(color), get_callback_data(paintData), get_callback_data(user)), "viiiii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_color_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the paint-image callback on the paint functions object.
+	* @param func The paint-image callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setImageFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, blob, width, height, format, slant, extentsPtr, user) => {
+			const length = exports.hb_blob_get_length(blob);
+			const dataPtr = exports.hb_blob_get_data(blob, 0);
+			const image = Module.HEAPU8.subarray(dataPtr, dataPtr + length);
+			let extents;
+			if (extentsPtr) extents = {
+				xBearing: Module.HEAP32[extentsPtr / 4],
+				yBearing: Module.HEAP32[extentsPtr / 4 + 1],
+				width: Module.HEAP32[extentsPtr / 4 + 2],
+				height: Module.HEAP32[extentsPtr / 4 + 3]
+			};
+			return func(image, width, height, hb_untag(format), extents, get_callback_data(paintData), get_callback_data(user)) ? 1 : 0;
+		}, "iiiiiiifii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_image_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the linear-gradient callback on the paint functions object.
+	* @param func The linear-gradient callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setLinearGradientFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, colorLine, x0, y0, x1, y1, x2, y2, user) => func(decode_color_line(colorLine), x0, y0, x1, y1, x2, y2, get_callback_data(paintData), get_callback_data(user)), "viiiffffffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_linear_gradient_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the radial-gradient callback on the paint functions object.
+	* @param func The radial-gradient callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setRadialGradientFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, colorLine, x0, y0, r0, x1, y1, r1, user) => func(decode_color_line(colorLine), x0, y0, r0, x1, y1, r1, get_callback_data(paintData), get_callback_data(user)), "viiiffffffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_radial_gradient_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the sweep-gradient callback on the paint functions object.
+	* @param func The sweep-gradient callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setSweepGradientFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, colorLine, x0, y0, startAngle, endAngle, user) => func(decode_color_line(colorLine), x0, y0, startAngle, endAngle, get_callback_data(paintData), get_callback_data(user)), "viiiffffi");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_sweep_gradient_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the push-group callback on the paint functions object.
+	* @param func The push-group callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setPushGroupFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, user) => func(get_callback_data(paintData), get_callback_data(user)), "viii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_push_group_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the pop-group callback on the paint functions object.
+	* @param func The pop-group callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setPopGroupFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, mode, user) => func(mode, get_callback_data(paintData), get_callback_data(user)), "viiii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_pop_group_func(this.ptr, funcPtr, userDataPtr, 0);
+	}
+	/**
+	* Sets the custom-palette-color callback on the paint functions object.
+	* @param func The custom-palette-color callback.
+	* @param userData Data to pass to `func`.
+	*/
+	setCustomPaletteColorFunc(func, userData) {
+		const userDataPtr = register_callback_data_pointer(userData);
+		this.userDataPtrs.push(userDataPtr);
+		const funcPtr = Module.addFunction((funcs, paintData, colorIndex, colorPtr, user) => {
+			const color = func(colorIndex, get_callback_data(paintData), get_callback_data(user));
+			if (color !== void 0) {
+				Module.HEAPU32[colorPtr / 4] = color_to_int(color);
+				return 1;
+			}
+			return 0;
+		}, "iiiiii");
+		this.funcPtrs.push(funcPtr);
+		exports.hb_paint_funcs_set_custom_palette_color_func(this.ptr, funcPtr, userDataPtr, 0);
 	}
 };
 //#endregion
@@ -1626,4 +2319,4 @@ function otTagToLanguage(tag) {
 //#region src/index.ts
 init(await createHarfBuzz());
 //#endregion
-export { Blob, Buffer, BufferContentType, BufferFlag, BufferSerializeFlag, BufferSerializeFormat, ClusterLevel, Direction, Face, Feature, Font, FontFuncs, GlyphClass, GlyphFlag, MetricsTag, TracePhase, Variation, otTagToLanguage, otTagToScript, shape, shapeWithTrace, version, versionString };
+export { AxisFlags, Blob, Buffer, BufferContentType, BufferFlag, BufferSerializeFlag, BufferSerializeFormat, ClusterLevel, ColorPaletteFlags, Direction, DrawFuncs, Face, Feature, Font, FontFuncs, GlyphClass, GlyphFlag, MetricsTag, PaintCompositeMode, PaintExtend, PaintFuncs, TracePhase, Variation, otTagToLanguage, otTagToScript, shape, shapeWithTrace, version, versionString };
