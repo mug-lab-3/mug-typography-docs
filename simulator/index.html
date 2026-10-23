@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#252526">
-<meta name="mt-simulator-build" content="81af10a2a9724f80">
+<meta name="mt-simulator-build" content="6a1927c01c574cf2">
 <meta name="mt-prelude-url" content="prelude-522c011b6b98.lua">
 <meta name="mt-prelude-drawing-path-url" content="prelude_drawing_path-3e4364d9ad16.lua">
 <link rel="stylesheet" href="style-00bee200bbaa.css">
@@ -517,6 +517,26 @@
   .doc-viewer-body pre { background: #111; padding: 8px; overflow-x: auto; }
   .doc-viewer-body code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
 
+  .ai-preview-panel { width: min(1000px, 94vw); height: auto; max-height: 92vh; }
+  .ai-preview-body { display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.5; }
+  .ai-preview-body p { margin: 0; }
+  /* The notes and the image box keep a fixed height so the dialog does not resize with the frame count or the canvas shape. */
+  .ai-preview-note { color: #aaaaaa; min-height: 3em; }
+  .ai-preview-field { display: flex; align-items: center; gap: 12px; }
+  .ai-preview-label { font-weight: 600; }
+  .ai-preview-counts { display: flex; gap: 6px; }
+  .ai-preview-counts button { min-width: 44px; padding: 6px 12px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #d4d4d4; font-size: 13px; cursor: pointer; }
+  .ai-preview-counts button:hover { background: #4a4a4a; }
+  .ai-preview-counts button[aria-pressed="true"] { background: #094771; border-color: #3794ff; color: #ffffff; }
+  .ai-preview-image-frame { height: min(52vh, 560px); flex: none; display: flex; align-items: center; justify-content: center; background: #111; border: 1px solid #333; border-radius: 4px; padding: 6px; overflow: hidden; box-sizing: border-box; }
+  .ai-preview-image-frame canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .ai-preview-status { color: #aaaaaa; }
+  .ai-preview-actions { display: flex; align-items: center; gap: 8px; }
+  .ai-preview-actions button { padding: 6px 14px; background: #0e639c; border: none; border-radius: 4px; color: #ffffff; font-size: 13px; cursor: pointer; }
+  .ai-preview-actions button:hover:not(:disabled) { background: #1177bb; }
+  .ai-preview-actions button:disabled { opacity: 0.5; cursor: default; }
+  .ai-preview-result { color: #aaaaaa; }
+
   /* Navigation and results scroll independently inside the sample browser. */
   .sample-browser-panel {
     background: #1e1e1e;
@@ -969,6 +989,10 @@
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
       <span data-i18n-text>Copy AI API Reference</span>
     </button>
+    <button id="open-ai-preview-button" type="button" role="menuitem" data-i18n="menu.aiPreview">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
+      <span data-i18n-text>AI Preview Image…</span>
+    </button>
     <button id="open-licenses-button" type="button" role="menuitem" data-i18n="menu.thirdPartyNotices">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
       <span data-i18n-text>Third-Party Notices</span>
@@ -1046,6 +1070,37 @@
     <div class="doc-viewer-body" id="licenses-viewer-body"></div>
   </div>
 </div>
+<div class="doc-viewer-overlay" id="ai-preview-overlay">
+  <div class="doc-viewer-panel ai-preview-panel" role="dialog" aria-modal="true" data-i18n-aria-label="aiPreview.title" aria-label="Preview Image for AI">
+    <div class="doc-viewer-header">
+      <strong data-i18n="aiPreview.title">Preview Image for AI</strong>
+      <button id="close-ai-preview-button" class="overlay-close-button" type="button" aria-label="Close" title="Close">✕</button>
+    </div>
+    <div class="doc-viewer-body ai-preview-body">
+      <p class="ai-preview-lead" data-i18n="aiPreview.lead"></p>
+      <div class="ai-preview-field">
+        <span class="ai-preview-label" data-i18n="aiPreview.framesLabel">Frames</span>
+        <div class="ai-preview-counts" id="ai-preview-counts" role="group" data-i18n-aria-label="aiPreview.framesLabel" aria-label="Frames">
+          <button type="button" data-count="4">4</button>
+          <button type="button" data-count="6">6</button>
+          <button type="button" data-count="9">9</button>
+          <button type="button" data-count="12">12</button>
+        </div>
+      </div>
+      <p class="ai-preview-note" id="ai-preview-count-hint"></p>
+      <p class="ai-preview-note" id="ai-preview-range"></p>
+      <div class="ai-preview-image-frame">
+        <canvas id="ai-preview-canvas" role="img" aria-label="Preview image for AI" hidden></canvas>
+        <span class="ai-preview-status" id="ai-preview-status"></span>
+      </div>
+      <div class="ai-preview-actions">
+        <button id="ai-preview-copy-button" type="button" data-i18n="aiPreview.copy" disabled>Copy image</button>
+        <button id="ai-preview-download-button" type="button" data-i18n="aiPreview.download" disabled>Download image</button>
+        <span class="ai-preview-result" id="ai-preview-result" role="status"></span>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="doc-viewer-overlay" id="webmcp-guide-overlay">
   <div class="doc-viewer-panel">
     <div class="doc-viewer-header">
@@ -1055,6 +1110,6 @@
     <div class="doc-viewer-body" id="webmcp-guide-body" style="padding: 16px; line-height: 1.6; font-size: 13px; color: #d4d4d4;"></div>
   </div>
 </div>
-<script type="module" src="web-main-ZAWDGBMA.js"></script>
+<script type="module" src="web-main-J4HQU5ZQ.js"></script>
 </body>
 </html>
