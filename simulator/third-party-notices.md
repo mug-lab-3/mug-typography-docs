@@ -3,7 +3,7 @@
 This application bundles the third-party components listed below. Each license
 applies only to the respective component.
 
-## wasmoon 1.16.0 (MIT)
+## wasmoon (MIT)
 
 ```
 MIT License
@@ -56,7 +56,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-## harfbuzzjs 1.4.0 (MIT)
+## harfbuzzjs (MIT)
 
 ```
 Copyright (c) 2019-2026 The harfbuzzjs project authors
@@ -130,7 +130,7 @@ ON AN "AS IS" BASIS, AND THE COPYRIGHT HOLDER HAS NO OBLIGATION TO
 PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 ```
 
-## mediabunny 1.52.0 (Mozilla Public License 2.0)
+## mediabunny (Mozilla Public License 2.0)
 
 Used to multiplex recorded frames into a WebM file.
 
@@ -143,7 +143,7 @@ available at https://mozilla.org/MPL/2.0/.
 mediabunny is used in unmodified form. Its Source Code Form, as defined by
 the license, is published at https://github.com/Vanilagy/mediabunny and is
 also available from the npm registry at
-https://registry.npmjs.org/mediabunny/-/mediabunny-1.52.0.tgz.
+https://registry.npmjs.org/mediabunny/-/mediabunny-1.62.1.tgz.
 
 ## Google Material Icons (Apache License 2.0)
 

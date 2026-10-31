@@ -28,12 +28,7 @@ function hb_tag(s) {
 	return (s.charCodeAt(0) & 255) << 24 | (s.charCodeAt(1) & 255) << 16 | (s.charCodeAt(2) & 255) << 8 | (s.charCodeAt(3) & 255) << 0;
 }
 function hb_untag(tag) {
-	return [
-		String.fromCharCode(tag >> 24 & 255),
-		String.fromCharCode(tag >> 16 & 255),
-		String.fromCharCode(tag >> 8 & 255),
-		String.fromCharCode(tag >> 0 & 255)
-	].join("");
+	return String.fromCharCode(tag >> 24 & 255, tag >> 16 & 255, tag >> 8 & 255, tag >> 0 & 255);
 }
 function utf8_ptr_to_string(ptr, length) {
 	let end;
@@ -2298,7 +2293,7 @@ function versionString() {
 	return utf8_ptr_to_string(exports.hb_version_string());
 }
 /**
-* Convert an OpenType script tag to HarfBuzz script.
+* Convert an OpenType script tag to HarfBuzz script (ISO 15924).
 * @param tag The tag to convert.
 * @returns The script.
 */
@@ -2307,7 +2302,7 @@ function otTagToScript(tag) {
 	return hb_untag(exports.hb_ot_tag_to_script(hbTag));
 }
 /**
-* Convert an OpenType language tag to HarfBuzz language.
+* Convert an OpenType language tag to HarfBuzz language (BCP 47).
 * @param tag The tag to convert.
 * @returns The language.
 */
@@ -2315,8 +2310,58 @@ function otTagToLanguage(tag) {
 	const hbTag = hb_tag(tag);
 	return language_to_string(exports.hb_ot_tag_to_language(hbTag));
 }
+/** https://harfbuzz.github.io/harfbuzz-hb-ot-layout.html#HB-OT-MAX-TAGS-PER-LANGUAGE:CAPS */
+const HB_OT_MAX_TAGS_PER_LANGUAGE = 3;
+/** https://harfbuzz.github.io/harfbuzz-hb-ot-layout.html#HB-OT-MAX-TAGS-PER-SCRIPT:CAPS */
+const HB_OT_MAX_TAGS_PER_SCRIPT = 3;
+/**
+* Convert a HarfBuzz script (ISO 15924) and a HarfBuzz language (BCP 47) to OpenType script tags and OpenType language tags.
+* @param script A HarfBuzz script to convert.
+* @param language A HarfBuzz language to convert.
+* @returns An object with the OpenType script tags and the OpenType language tags.
+*/
+function otTagsFromScriptAndLanguage(script, language) {
+	const sp = Module.stackSave();
+	const scriptStr = string_to_ascii_ptr(script);
+	const languageStr = string_to_ascii_ptr(language);
+	const scriptCountPtr = Module.stackAlloc(4);
+	Module.HEAPU32[scriptCountPtr / 4] = HB_OT_MAX_TAGS_PER_SCRIPT;
+	const scriptTagsPtr = Module.stackAlloc(HB_OT_MAX_TAGS_PER_SCRIPT * 4);
+	const languageCountPtr = Module.stackAlloc(4);
+	Module.HEAPU32[languageCountPtr / 4] = HB_OT_MAX_TAGS_PER_LANGUAGE;
+	const languageTagsPtr = Module.stackAlloc(HB_OT_MAX_TAGS_PER_LANGUAGE * 4);
+	exports.hb_ot_tags_from_script_and_language(exports.hb_script_from_string(scriptStr.ptr, -1), exports.hb_language_from_string(languageStr.ptr, -1), scriptCountPtr, scriptTagsPtr, languageCountPtr, languageTagsPtr);
+	scriptStr.free();
+	languageStr.free();
+	const scriptTags = Module.HEAPU32.subarray(scriptTagsPtr / 4, scriptTagsPtr / 4 + Module.HEAPU32[scriptCountPtr / 4]);
+	const languageTags = Module.HEAPU32.subarray(languageTagsPtr / 4, languageTagsPtr / 4 + Module.HEAPU32[languageCountPtr / 4]);
+	Module.stackRestore(sp);
+	return {
+		scriptTags: [...scriptTags].map(hb_untag),
+		languageTags: [...languageTags].map(hb_untag)
+	};
+}
+/**
+* Convert an OpenType script tag and an OpenType language tag to a HarfBuzz script (ISO 15924) and a HarfBuzz language (BCP 47).
+* @param scriptTag An OpenType script tag.
+* @param languageTag An OpenType language tag.
+* @returns An object with the HarfBuzz script and the HarfBuzz language.
+*/
+function otTagsToScriptAndLanguage(scriptTag, languageTag) {
+	const sp = Module.stackSave();
+	const scriptPtr = Module.stackAlloc(4);
+	const languagePtr = Module.stackAlloc(4);
+	exports.hb_ot_tags_to_script_and_language(hb_tag(scriptTag), hb_tag(languageTag), scriptPtr, languagePtr);
+	const script = Module.HEAPU32[scriptPtr / 4];
+	const language = Module.HEAPU32[languagePtr / 4];
+	Module.stackRestore(sp);
+	return {
+		script: hb_untag(script),
+		language: language_to_string(language)
+	};
+}
 //#endregion
 //#region src/index.ts
 init(await createHarfBuzz());
 //#endregion
-export { AxisFlags, Blob, Buffer, BufferContentType, BufferFlag, BufferSerializeFlag, BufferSerializeFormat, ClusterLevel, ColorPaletteFlags, Direction, DrawFuncs, Face, Feature, Font, FontFuncs, GlyphClass, GlyphFlag, MetricsTag, PaintCompositeMode, PaintExtend, PaintFuncs, TracePhase, Variation, otTagToLanguage, otTagToScript, shape, shapeWithTrace, version, versionString };
+export { AxisFlags, Blob, Buffer, BufferContentType, BufferFlag, BufferSerializeFlag, BufferSerializeFormat, ClusterLevel, ColorPaletteFlags, Direction, DrawFuncs, Face, Feature, Font, FontFuncs, GlyphClass, GlyphFlag, MetricsTag, PaintCompositeMode, PaintExtend, PaintFuncs, TracePhase, Variation, otTagToLanguage, otTagToScript, otTagsFromScriptAndLanguage, otTagsToScriptAndLanguage, shape, shapeWithTrace, version, versionString };

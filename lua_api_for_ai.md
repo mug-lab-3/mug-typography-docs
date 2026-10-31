@@ -1,4 +1,4 @@
-Target API level: **12**. Lua 5.4 for the Mug Typography plugin.
+Target API level: **13**. Lua 5.4 for the Mug Typography plugin.
 
 ## 0. Reference lookup
 
@@ -7,70 +7,34 @@ exact API entries the script uses.
 
 Lookup order:
 
-1. `ctx` reference: field types, units, reference points and read/write phases.
-2. `mt.*` utility reference: signatures and purposes for selecting a function.
-3. `mt.*` full reference: argument types, units, defaults, permitted values and
-   errors. Search the API name or jump to its `#### ` heading.
+1. `ctx` reference (Section 13): field types, units, neutral values, axis directions, reference points, and `[R:... W:...]` callback access phases.
+2. `mt.*` utility reference (Section 14): signatures and purposes for selecting a function.
+3. `mt.*` full reference (Section 15): argument types, units, defaults, permitted enum values, return shapes, and error conditions. Search the API name or jump to its `#### ` heading.
 
-Read the exact entry instead of guessing enum values, optional defaults or table
-shapes, and do not swap in another API to avoid a lookup. Facts absent from this
-reference are unknown.
+Lookup rules:
 
-Precedence: per-field metadata governs field access and units; full function
-entries govern arguments; the prose governs cross-field behavior and generation
-policy. Follow that order when statements disagree, and report the disagreement
-alongside the script.
-
-This file is self-contained; ordinary generation needs no companion attachment.
-An older installed plugin requires its matching reference (see Compatibility).
-When distribution samples are available, imitate the structure of a nearby one:
-`samples/reference/` shows individual concepts, `samples/showcase/` complete
-effects.
+1. Read the exact entry instead of guessing enum values, optional defaults, or table shapes, and do not swap in another API to avoid a lookup. Facts absent from this reference are unknown.
+2. Precedence: per-field metadata governs field access and units; full function entries govern arguments; the prose governs cross-field behavior and generation policy. Follow that order when statements disagree, and report the disagreement alongside the script.
+3. This file is self-contained; ordinary generation needs no companion attachment. An older installed plugin requires its matching reference (see Compatibility).
+4. When distribution samples are available, imitate the structure of a nearby one: `samples/reference/` shows individual concepts, `samples/showcase/` complete effects.
 
 ## 1. Essential contract
 
 Runtime requirements:
 
-1. Compute each frame from current inputs alone. `ctx` is rebuilt from Inspector
-   values every frame, and frames may be evaluated out of order, so cross-frame
-   accumulation is invalid. File-scope locals may only pass freshly recomputed
-   values between callbacks within the same frame.
-2. Write each field only in its `W:` phase: `OnPreLayout` for global/camera
-   settings and glyph declarations, `OnLayout` for character/part properties,
-   `ctx.bounding_box` and output settings, `OnPath` for outlines. Writing outside
-   a `W:` phase raises an error. Counts exist only after layout; array indexes
-   start at 1. New scripts omit legacy `OnInitialize`.
-3. Keep positions, displacements and lengths distinct. `offset_*` and `pivot_*`
-   have zero displacement at `0.5`, so `0.0` is a displacement of `-0.5`, not the
-   origin; canvas positions have their center at `0.5`. Shadow distance
-   and blur lengths use em; bounding-box lengths use font-size percent.
-4. Placement coordinates are Y-up; drawing paths are Y-down. 2D angles are
-   clockwise-positive (`shadow.angle = 90` points down); negate angles taken from
-   the counterclockwise math convention, and build vectors from an angle with
-   `mt.polar_offset_2d`. Measured post-global coordinates go through the
-   placement helpers, not into pre-global offsets.
-5. A style's `use` selects an override, not visibility. Enable it when supplying
-   an individual style, and preserve inherited components for partial changes.
-   Subobject table assignments merge fields; omitted fields remain unchanged.
-6. A callback error aborts the current frame and skips later callbacks. Earlier
-   writes are not guaranteed to be rolled back, but the incomplete frame is never
-   rendered.
+1. Compute each frame from current inputs alone. `ctx` is rebuilt from Inspector values every frame, and frames may be evaluated out of order, so cross-frame accumulation (`x = x + 1`) is invalid. File-scope locals may only pass freshly recomputed values between callbacks within the same frame.
+2. Write each field only in its `W:` phase: `OnPreLayout` for `ctx.global`, `ctx.camera`, `ctx.glyphs:declare`, and `ctx.shapes:declare` / `ctx.shape_cameras:declare`; `OnLayout` for `ctx.chars[i]`, `ctx.parts[i]`, `ctx.shapes[i]` (including its `path`), `ctx.shape_cameras[i]`, `ctx.bounding_box`, and `ctx.output`; `OnPath` for `part.path` obtained from `ctx.paths`. Writing outside a `W:` phase raises an error. Counts (`ctx.char_count`, `ctx.part_count`, `ctx.shape_count`) exist only after layout (`OnLayout` / `OnPath`); array indexes start at 1. New scripts omit legacy `OnInitialize`.
+3. Keep positions, displacements, and lengths distinct. `offset_*` and `pivot_*` have zero displacement at `0.5`, so `0.0` is a displacement of `-0.5` (half a canvas down/left), not the origin; canvas positions (`ctx.global.position_x` / `position_y`, `ctx.camera.target_x` / `target_y`) have their center at `0.5`. Shadow distance and blur lengths use em (`1.0` = one font size); bounding-box lengths use font-size percent (`100.0` = one font size).
+4. Placement coordinates are Y-up; drawing paths (`MtDrawingPath`) and bounding-box fill/stroke Y offsets are Y-down. 2D angles are clockwise-positive (`shadow.angle = 90` points down); negate angles taken from the counterclockwise math convention, and build vectors from an angle with `mt.polar_offset_2d`. Measured post-global coordinates (`mt.layout.measure_bounds_2d`, `mt.layout.get_canvas_position_2d`) go through `mt.layout.place_2d` / `mt.layout.canvas_to_offset_2d` / `mt.layout.pivot_at_2d`, never directly into pre-global `offset_*`.
+5. A style's `use` selects an override, not visibility. Set `use = true` in the same callback when supplying an individual `fill`, `stroke`, `shadow`, `texture`, or `blur`, and preserve inherited components via `mt.<group>.resolve` for partial changes. Subobject table assignments merge fields; omitted fields remain unchanged.
+6. A callback error aborts the current frame and skips later callbacks. Earlier writes are not guaranteed to be rolled back, but the incomplete frame is never rendered.
 
 Default generation policy (explicit effect requirements may override it):
 
-1. Compose animation over Inspector values: add deltas to position, offset,
-   pivot, rotation and depth; multiply scale, stretch and opacity by factors.
-   Copy originals before multiple writes that need the same baseline. Replace
-   only what the effect drives; when enabling a feature, configure its related
-   parameters, since inactive fields need not hold the effective inherited style.
-2. Keep fixed-duration transitions in seconds; use clip fractions only for
-   intentionally clip-proportional timing.
-3. Preserve 3D projection. Set `ctx.output.force_disable_3d_projection` only for
-   an explicit 2D-only request or an effect that requires 2D output; it overrides
-   all Inspector and keyframed 3D values. Neutral 3D values or 2D-only motion are
-   not reasons; leaving it `false` lets the user add 3D in the Inspector later.
-4. Omit deprecated APIs. Declare the target API level in complete new scripts.
-   Add material effects only when requested or required by the named material.
+1. Compose animation over Inspector values: add deltas to position, offset, pivot, rotation, and depth (`z`); multiply scale, stretch, and opacity by factors. Copy originals before multiple writes that need the same baseline. Replace only what the effect drives; when enabling a feature, configure its related parameters, since inactive fields need not hold the effective inherited style.
+2. Keep fixed-duration transitions in seconds (`mt.timeline.intro_outro_seconds`, `mt.timeline.remaining`); use clip fractions only for intentionally clip-proportional timing.
+3. Preserve 3D projection. Set `ctx.output.force_disable_3d_projection` only for an explicit 2D-only request or an effect that requires 2D output; it overrides all Inspector and keyframed 3D values. Neutral 3D values or 2D-only motion are not reasons; leaving it `false` lets the user add 3D in the Inspector later.
+4. Omit deprecated APIs. Declare the target API level (`-- @api_level 13`) in complete new scripts. Add material effects (`texture.type`) only when requested or required by the named material.
 
 ```lua
 -- RIGHT: motion derived from ctx.time, composed over the current settings
@@ -78,43 +42,47 @@ ctx.global.rotation = ctx.global.rotation + ctx.time * 20.0   -- in OnPreLayout
 character.offset_y = character.offset_y + math.sin(ctx.time) * 0.05
 character.scale = character.scale * (1.0 + math.sin(ctx.time) * 0.1)
 character.opacity = character.opacity * fade
+character.fill.use = true
+character.fill.color = mt.color.lerp_oklab(fromColor, toColor, t)
 
 -- WRONG if cumulative motion was intended: this is always Inspector + 1
 ctx.global.rotation = ctx.global.rotation + 1.0
 
--- WRONG if "no offset" was intended: shifts down half a canvas
+-- WRONG if "no offset" was intended: shifts down half a canvas (neutral is 0.5)
 character.offset_y = 0.0
+
+-- WRONG: ignored because character.fill.use is false
+character.fill.color = { r = 1.0, g = 0.2, b = 0.2, a = 1.0 }
 ```
 
 ## 2. Callbacks
 
-All callbacks are optional. `OnInitialize(ctx)` runs once at script load (legacy).
-Writes: `mt.storage` (deprecated). Reads: only `ctx.canvas`, `ctx.fonts`,
-`ctx.meta`, `ctx.inputs`. On error: frame evaluation does not start.
+All callbacks are optional. `OnInitialize(ctx)` runs once at script load (legacy; omit in new scripts). Writes: `mt.storage` (deprecated). Reads: only `ctx.canvas`, `ctx.fonts`, `ctx.meta`, `ctx.inputs`. On error: frame evaluation does not start.
 
 Every frame, in order:
 
-1. `OnPreLayout(ctx)`. Writes: `ctx.global`, `ctx.camera`, glyph declarations
-   through `ctx.glyphs`. On error: frame aborted; `OnLayout` and `OnPath` skipped.
-2. Layout generation. Character and part counts become final here, so
-   `ctx.char_count` is undefined in `OnPreLayout`.
-3. `OnLayout(ctx)`. Writes: `ctx.chars[i]`, `ctx.parts[i]`, `ctx.bounding_box`,
-   `ctx.output`. On error: frame aborted; `OnPath` skipped.
-4. `OnPath(ctx)`. Writes: `path` of parts obtained from `ctx.paths`. On error:
-   frame aborted.
+1. `OnPreLayout(ctx)`:
+   - Writes: `ctx.global`, `ctx.camera`, custom glyph declarations (`ctx.glyphs:declare`), shape declarations (`ctx.shapes:declare`), shape camera declarations (`ctx.shape_cameras:declare`).
+   - Reads: `ctx.time`, `ctx.frame`, `ctx.fps`, `ctx.canvas`, `ctx.fonts`, `ctx.timeline`, `ctx.meta`, `ctx.inputs`, `ctx.global`, `ctx.camera`.
+   - Unavailable: `ctx.char_count`, `ctx.part_count`, `ctx.shape_count`, `ctx.chars`, `ctx.parts`, `ctx.font`, `ctx.bounding_box`, `ctx.output`, `ctx.paths`.
+   - On error: frame aborted; `OnLayout` and `OnPath` skipped.
+2. Layout generation (engine internal):
+   - Text is shaped and laid out using finalized `ctx.global` and `ctx.glyphs`. Character, part, and shape counts (`ctx.char_count`, `ctx.part_count`, `ctx.shape_count`) and font metrics (`ctx.font`) become final here.
+3. `OnLayout(ctx)`:
+   - Writes: `ctx.chars[i]`, `ctx.parts[i]`, `ctx.shapes[i]` (including in-place edits on `ctx.shapes[i].path`), `ctx.shape_cameras[i]`, `ctx.bounding_box`, `ctx.output`.
+   - Reads: all `OnPreLayout` readable fields (now read-only for `ctx.global` and `ctx.camera`), plus `ctx.char_count`, `ctx.part_count`, `ctx.shape_count`, `ctx.font`, `ctx.chars[i]`, `ctx.parts[i]`, `ctx.shapes[i]`, `ctx.shape_cameras[i]`, `ctx.bounding_box`, `ctx.output`.
+   - On error: frame aborted; `OnPath` skipped.
+4. `OnPath(ctx)`:
+   - Writes: `part.path` on parts obtained lazily from `ctx.paths:part`, `ctx.paths:character`, `ctx.paths:shape`, or `ctx.paths:select`.
+   - Reads: finalized layout and transform fields, plus `ctx.paths`.
+   - On error: frame aborted.
 5. Render.
 
-Later callbacks read what earlier ones finalized but cannot write it back:
-`ctx.global` and `ctx.camera` are read-only in `OnLayout`. The per-field
-`[R:...  W:...]` markers are authoritative. Iterate with `ctx.char_count` /
-`ctx.part_count`; never assume a fixed character count, part count or glyph shape.
+Later callbacks read what earlier ones finalized but cannot write it back: `ctx.global` and `ctx.camera` are read-only in `OnLayout` and `OnPath`. The per-field `[R:... W:...]` markers in Section 13 are authoritative. Iterate with `ctx.char_count` / `ctx.part_count` (or `mt.each_char` / `mt.each_part`); never assume a fixed character count, part count, or glyph shape.
 
 ### Passing values between callbacks
 
-Use a file-scope local only for a value a later callback can no longer read, such
-as an Inspector value the earlier callback replaces. Overwrite it from current
-inputs every frame. Values readable in every phase, such as `ctx.inputs`, are
-read where they are used.
+Use a file-scope local only for a value a later callback can no longer read, such as an Inspector value that `OnPreLayout` replaces. Overwrite it from current inputs every frame before reading it. Values readable in every phase, such as `ctx.inputs`, are read directly where they are used.
 
 ```lua
 local scaleKnob = 1.0
@@ -135,52 +103,59 @@ end
 
 ## 3. Inspector composition and style inheritance
 
-`fill` / `stroke` / `shadow` / `texture` / `blur` resolve in three steps:
+`fill`, `stroke`, `shadow`, `texture`, and `blur` resolve in three tiers:
 
-1. The global value is finalized in `OnPreLayout`.
-2. Character level: `use == true` takes the character value, otherwise the global value.
-3. Part level: `use == true` takes the part value, otherwise the value chosen in step 2.
+1. `global`: finalized in `OnPreLayout` (`ctx.global.*`).
+2. `character`: `character.<style>.use == true` takes the character value; otherwise inherits the `global` value.
+3. `part`: `part.<style>.use == true` takes the part value; otherwise inherits the value chosen at the `character` tier.
 
-Opacity then multiplies: `global.opacity * character.opacity * part.opacity`.
-Transform fields (offset, scale, rotation, …) have no `use` flag and always apply.
+Shapes (`ctx.shapes[i]`) inherit from `ctx.global.*` and override with `shape.<style>.use = true` in `OnLayout`.
+
+Opacity multiplies across tiers without a `use` flag: `global.opacity * character.opacity * part.opacity` (for shapes: `global.opacity * shape.opacity`). Transform fields (`offset_*`, `pivot_*`, `scale`, `stretch_*`, `rotation`, `z`, `yaw`, `pitch`) also have no `use` flag and always compose across tiers.
 
 ### Individual style overrides
 
-An individual color has no effect while `use` is `false`; set both in the same
-callback:
+An individual style has no effect while `use` is `false`; set `use = true` and the style fields in the same callback:
 
 ```lua
 character.fill.use = true
 character.fill.color = mt.color.from_okhsv(index / ctx.char_count, 0.8, 1.0)
 ```
 
-- A gradient (`gradient.color_space ~= "none"`) fills only regions where both
-  character and part `fill.use` are `false`.
-- `global.fill.transparent` hides the inherited fill and removes it from the
-  shadow's silhouette, so the shadow comes from the stroke alone. Characters and
-  parts with an individual fill color still draw that fill and cast its shadow.
-- Part `stroke` / `shadow` / `yaw` / `pitch` and character/part `texture` / `blur`
-  have no Inspector group: they start unused with default values.
-- `shadow.use` switches shadow color and shadow blur together, and casts a shadow
-  even while `global.shadow.enabled` is `false`. To override only one of them,
-  read the tier above with `mt.shadow.resolve(ctx, target, { level = "character" })`,
-  set `use`, and write both back with the one you change.
-- `mt.color.resolve_fill`, `mt.shadow.resolve`, `mt.blur.resolve`,
-  `mt.stroke.resolve` and `mt.texture.resolve` return the final value;
-  `options.level` ("global"|"character"|"part") stops at an earlier tier.
-- The text `blur` has its own `use` and does not blur the shadow.
+Style inheritance and partial-override rules:
 
-Assigning a table to a subobject merges per field:
+- `gradient`: `gradient.color_space ~= "none"` fills only regions where both character and part `fill.use` are `false`. Setting `fill.use = true` on a character or part replaces the gradient on that element with its solid `fill.color`.
+- `global.fill.transparent`: when `true`, hides the inherited fill and removes it from the shadow's silhouette, so the shadow comes from the stroke alone. Characters and parts with `fill.use = true` still draw their individual fill and cast its shadow.
+- Script-only fields (no Inspector parameter group backs them): `part.stroke`, `part.shadow`, `part.yaw`, `part.pitch`, and character/part/shape `texture` and `blur` start with `use = false` and default values every frame unless set by the script. Furthermore, `character.shadow.blur_x`, `character.shadow.blur_y`, and `character.shadow.glow` are script-only and read as the frame's global shadow blur/glow until a script sets them.
+- `shadow.use`: switches shadow `color`, `blur_x`, `blur_y`, and `glow` together as one bundle, and casts a shadow on that element even while `ctx.global.shadow.enabled` is `false`. `distance` and `angle` exist only on `ctx.global.shadow`.
+- `blur.use`: switches text blur `amount_x`, `amount_y`, and `glow` together, independently of `shadow.use`. Text `blur` blurs the glyph body (fill, gradient, texture, stroke, crayon) and never blurs the shadow.
+- `stroke.use`: switches `width`, `gap`, `color`, `outer_width`, and `outer_color` together. `order`, `join`, and `miter_limit` exist only on `ctx.global.stroke`. `outer_width` is active only while inner `width > 0`.
+- `mt.color.resolve_fill`, `mt.shadow.resolve`, `mt.blur.resolve`, `mt.stroke.resolve`, and `mt.texture.resolve`: return the effective resolved style for a character or part. Passing `{ level = "global" | "character" | "part" }` stops inheritance at that tier. To override only one field of a multi-field style bundle (e.g. changing only `shadow.glow` on a character while keeping its inherited shadow color and blur), resolve the parent tier (`{ level = "global" }` for a character, or `{ level = "character" }` for a part), set `use = true`, and write back the resolved table with the modified field:
+
+```lua
+local inheritedShadow = mt.shadow.resolve(ctx, character, { level = "global" })
+character.shadow = {
+    use = true,
+    color = inheritedShadow.color,
+    blur_x = inheritedShadow.blur_x,
+    blur_y = inheritedShadow.blur_y,
+    glow = 0.5,
+}
+```
+
+Assigning a table to any subobject (`ctx.global.shadow`, `character.fill`, `character.stroke`, `character.shadow`, `character.texture`, `character.blur`, etc.) merges per field; omitted fields remain unchanged:
 
 ```lua
 ctx.global.shadow = { enabled = true, distance = 0.12 }   -- other shadow fields unchanged
 ```
 
+### Text glow
+
+- `blur.glow` lifts the blurred text into a glow using the same formula as `shadow.glow`: gain `1 + 10 * glow`, with each RGBA channel clamped at `1.0`. It acts only while the text is blurred (`amount_x > 0` or `amount_y > 0`).
+
 ### Respect the inspector
 
-Inspector-backed fields start at the Inspector values; script-only overrides may
-start unused with defaults. Write what the animation drives and read what it only
-needs: a field assigned a constant every frame is a control taken from the user.
+Inspector-backed fields start each frame at the user's Inspector values; script-only overrides start unused with defaults. Write what the animation drives and read what it only needs: a field assigned a constant every frame is a control taken from the user.
 
 ```lua
 -- WRONG: the inspector's gradient color no longer does anything
@@ -191,56 +166,67 @@ ctx.global.gradient.start_position = heatEdge
 local glowColor = ctx.global.gradient.end_color
 ```
 
-`ctx.global.fill.color`, `ctx.global.gradient.end_color` and
-`mt.color.resolve_fill` report resolved values, so build on the user's palette
-instead of restating a literal. Nudge values onto the current one:
-`ctx.global.tracking = ctx.global.tracking - strain * 0.05`.
+`ctx.global.fill.color`, `ctx.global.gradient.end_color`, and `mt.color.resolve_fill` report resolved values, so build on the user's palette instead of restating a literal. Nudge values relative to the current one: `ctx.global.tracking = ctx.global.tracking - strain * 0.05`.
 
 ## 4. Coordinates and transforms
 
-Every numeric field in the `ctx` reference carries `unit=`, and where meaningful
-`neutral=`, `axis=`, `range=` and `base=`. Units:
+Every numeric field in the `ctx` reference carries `unit=`, and where meaningful `neutral=`, `axis=`, `range=`, and `base=`.
 
-- `canvas_ratio_position`: absolute canvas position; `0.5` = canvas center; X uses
-  canvas width, Y uses canvas height. Fields: `global.position_*`,
-  `camera.target_*`, `geometry.*` canvas coordinates.
-- `canvas_ratio_displacement`: displacement from a reference point; `0.5` = zero
-  displacement. Fields: `global.pivot_*`, character/part `offset_*` and `pivot_*`.
-- `canvas_ratio_length`: length or relative offset as a canvas fraction; no `0.5`
-  neutral.
-- `font_size_percent`: `100.0` = one font size.
-- `em`: `1.0` = one font size.
-- `multiplier`: `1.0` = unchanged.
-- `unitless`: dimensionless script input value with no implied neutral point.
-- `unit_interval`: `0.0`–`1.0`.
-- `degrees`: angle, clockwise-positive for 2D.
-- `px`, `seconds`, `frames`, `fps`: literal units.
-- `font_design_units`, `path_units`: font/path coordinate space.
-- `perspective_strength`, `gradient_position`, `ratio`: see the field's `base=`.
+Unit vocabulary:
+
+- `canvas_ratio_position`: absolute canvas position; `0.5` = canvas center (`(0, 0)` is bottom-left, `(1, 1)` is top-right); X is normalized by canvas width, Y by canvas height (`axis=y_up`). Fields: `ctx.global.position_x` / `position_y`, `ctx.camera.target_x` / `target_y`, `ctx.shape_cameras[i].target_x` / `target_y`, and `geometry.*` canvas coordinates (`canvas_origin_*`, `vertical_origin_*`, `bounds_center_*`, `canvas_center_*`).
+- `canvas_ratio_displacement`: displacement from a reference point; `neutral=0.5` means zero displacement (`value - 0.5` is the signed displacement fraction of canvas width/height; Y is `axis=y_up`). Fields: `ctx.global.pivot_x` / `pivot_y`, and character/part/shape `offset_*` and `pivot_*`.
+- `canvas_ratio_length`: signed or unsigned distance as a fraction of canvas width or height; `neutral=0.0` (no `0.5` bias). Fields: `ctx.font.em_size` / `ascent` / `descent` / `line_height`, `geometry.bounds_width` / `bounds_height` / `advance_*` / `local_center_*`, character/part/shape `z` (`axis=z_into_screen`, positive is deeper/away from camera), and camera `lens_shift_*`.
+- `em`: `1.0` = one font size (`neutral=0.0`). Fields: `ctx.global.tracking`, `ctx.global.margins`, `ctx.global.emoji.offset_x` / `offset_y`, `stroke.width` / `gap` / `outer_width`, `shadow.distance` / `blur_x` / `blur_y`, and `blur.amount_x` / `amount_y`.
+- `font_size_percent`: `100.0` = one font size (`px = value * fontSizePx / 100`). Fields: `ctx.bounding_box.width` / `margin_*` / `corner_radius` / `fill_offset_*` / `stroke_offset_*`. Note that `margin_y` is `axis=y_up`, whereas `fill_offset_y` and `stroke_offset_y` are in drawing space (`axis=y_down`, positive moves downward).
+- `multiplier`: scale factor where `neutral=1.0` leaves size unchanged. Fields: `ctx.global.line_spacing`, `scale`, `stretch_x`, `stretch_y`, `camera.zoom`, `ctx.global.emoji.scale`, `ctx.global.stroke.miter_limit`.
+- `unit_interval`: `0.0`–`1.0` normalized value (`opacity` has `neutral=1.0`; `progress`, `midpoint`, `write_on_start`, `write_on_end`, and `color` channels range `0.0`–`1.0`).
+- `degrees`: angle in degrees (`neutral=0.0`). 2D rotations and angles are `axis=clockwise_positive`.
+- `path_units`: normalized local outline coordinates where `1000` units = `1.0` em (`axis=y_down` for paths: positive X is right, positive Y is down).
+- `font_design_units`: font-native design units (`ctx.font.units_per_em`, conversion factor only).
+- `perspective_strength`: `0.0`–`1.0` camera perspective strength (`distancePx = f(perspective) * canvas.height`; larger = camera closer / stronger perspective).
+- `gradient_position`: ratio along the gradient angle across the transformed text bounding box (`0.0`–`1.0` spans edge to edge).
+- `ratio`: aspect ratio (`ctx.canvas.aspect_ratio = width / height`, `ctx.canvas.pixel_aspect_ratio`).
+- `px`, `seconds`, `frames`, `fps`: literal physical/time units.
+- `unitless`: dimensionless scalar (`ctx.inputs.numbers`, `z_index`, `shadow.glow`, `blur.glow`, `texture.p1`–`p4`).
 
 ### Length units
 
-`shadow.distance`, `shadow.blur_x` / `blur_y` and `blur.amount_x` / `amount_y` are
-in em, measured on each part, so they stay proportional to the glyph under scale,
-stretch, rotation and perspective. `bounding_box.*` lengths are font-size percent
-(px = `value * fontSizePx / 100`).
+`shadow.distance`, `shadow.blur_x` / `blur_y`, and `blur.amount_x` / `amount_y` are in em, measured on each part, so they stay proportional to the glyph under scale, stretch, rotation, and perspective. `ctx.bounding_box.*` lengths are font-size percent (`px = value * fontSizePx / 100`).
 
 ```lua
 ctx.global.shadow.distance = 0.12   -- RIGHT: 0.12 em (useful range 0.05-0.3)
 ctx.global.shadow.distance = 12     -- WRONG: clamped to 10 em, ten font sizes away
 ```
 
+`shadow.glow` and `blur.glow` are not lengths: they are unitless strengths from `0` to `10` (clamped on write), where `0` means no glow.
+
+### Shadow glow
+
+- `shadow.glow` brightens the blurred shadow into a glow. It acts only on a blurred shadow: while `blur_x` and `blur_y` are both `0` it changes nothing, and a sigma below a quarter pixel counts as `0`.
+- It multiplies the blurred shadow's color and alpha by `1 + 10 * glow` and clamps each channel at full (`1.0`). Glow `0.1` multiplies by `2`, `0.5` by `6`, and `1.0` by `11`.
+- A faint halo becomes denser, and the bright region grows outward, because it reaches as far as the blurred alpha still exceeds `1 / (1 + 10 * glow)`. Raising `glow` widens the bright region instead of only brightening it.
+- Where a channel reaches full first, the others keep rising, so a strongly lifted core turns toward white, and a shadow color with one dominant channel shifts through lighter hues on the way.
+- The glow is part of the shadow: it is drawn under the text, follows the shadow offset (`distance = 0` centers it on the text), and leaves the text itself alone.
+- It draws over the background rather than lighting it up, so a light glow over a light background has little contrast.
+- Character and part `shadow.glow` follow `shadow.use`, like the shadow color and blur: set `use = true` in the same callback or the value is ignored.
+
+Values that read as a glow around text (judged on bold strokes about `0.14` em thick, on a dark background, with `distance = 0` and a saturated shadow color over white text):
+
+- `blur_x = 0.06`, `blur_y = 0.06` em keeps the letter shapes and spreads the light just outside the strokes. Use this blur for an ordinary glow.
+- With that blur, `glow = 0.2` is a faint glow, `0.4` a clear one, and `0.8` a strong one.
+- Past that, the glow floods the gaps: a wider blur or a `glow` above `0.8` fills counters such as the hole of an "o" and merges neighbouring strokes into a block.
+
 ### Pivot reference points
 
-A pivot is measured from the item's own reference point, never from the canvas,
-so never assign a `geometry` canvas coordinate to it:
+A pivot is measured from the item's own reference point, never from the canvas, so never assign a `geometry.*` canvas coordinate to `pivot_*`:
 
-- `global.pivot_*` — from `global.position`
-- `character.pivot_*` — from the natural bounds center (`geometry.bounds_center_*`)
-- `part.pivot_*` — from the natural position (`geometry.canvas_center_*`)
+- `ctx.global.pivot_x` / `pivot_y`: displacement from `ctx.global.position_x` / `position_y` (`0.5` = zero displacement).
+- `character.pivot_*`: displacement from the character's natural ink-bounds center (`character.geometry.bounds_center_*`).
+- `part.pivot_*`: displacement from the part's natural position (`part.geometry.canvas_center_*`).
+- `ctx.shapes[i].pivot_x` / `pivot_y`: displacement from the shape position (the path origin).
 
-To rotate a character around an edge, displace by half its size
-(`bounds_width` / `bounds_height` share the pivot's unit):
+To rotate or scale a character around an edge or baseline, either call `mt.layout.pivot_at_2d(ctx, character, anchor)` (which sets the pivot to a semantic anchor such as `"bottom"`, `"top"`, `"left"`, `"right"`, `"baseline"`, or `"typesetting_origin"` and automatically adjusts `offset_*` so the current pre-3D pose does not shift), or displace `pivot_*` manually from `0.5` by half its size (`bounds_width` / `bounds_height` share the pivot's canvas-normalized unit):
 
 ```lua
 local geometry = character.geometry
@@ -262,50 +248,36 @@ part.offset_y = part.offset_y + flight.y
 part.rotation = part.rotation + flight.rotation
 ```
 
-If something travels in a circle instead of a line or arc, check for a written
-pivot first.
+If something travels in a circle instead of a line or arc, check for a written pivot first.
 
 ### Transform composition order
 
 Each level applies its fields to geometry in this order:
 
 1. Subtract the pivot.
-2. Apply scale and stretch.
-3. Apply pitch, yaw, then rotation.
+2. Apply `scale` and `stretch_*`.
+3. Apply `pitch`, `yaw`, then `rotation`.
 4. Add the pivot.
 5. Add the offset (including `z`).
 6. Add the natural position.
 
-At the character level the natural bounds center is folded into the pivot term.
-The order is the same with or without 3D projection. Levels nest outward (part
-inside character inside `global`), so each level's pivot and rotation apply to
-everything beneath it. Consequences:
+At the character level the natural bounds center is folded into the pivot term. The order is the same with or without 3D projection. Levels nest outward (`part` inside `character` inside `global`), so each level's pivot and rotation apply to everything beneath it. Consequences:
 
-- **`offset_*` is outside the rotation.** It is never rotated, and the pivot
-  travels with the item, so moving an item never requires touching its pivot.
-- **`pivot_*` matters only when non-neutral.** At `0.5` the subtraction and
-  addition cancel and the item rotates and scales about itself; otherwise the
-  pivot is a lever arm for every rotation and scale at that level.
-- **`scale` and `stretch_*` are inside the rotation**, so they act along the
-  item's own axes, not the canvas axes.
-
-Changing a pivot moves the item. `mt.layout.pivot_at_2d` moves a pivot and
-corrects `offset_*` so the current pose does not shift.
+- `offset_*` is outside the level's own rotation: it is never rotated by that level's `rotation`, and the pivot travels with the item, so moving an item never requires touching its pivot.
+- `pivot_*` matters only when non-neutral: at `0.5` the subtraction and addition cancel and the item rotates and scales about itself; otherwise the pivot is a lever arm for every rotation and scale at that level.
+- `scale` and `stretch_*` are inside the rotation: they act along the item's own local axes, not the canvas axes.
+- Changing a pivot when rotation or scale is non-neutral shifts the item: call `mt.layout.pivot_at_2d(ctx, item, anchor)` to move a character/part pivot while compensating `offset_*` to preserve its current pose.
 
 ### Measure layout instead of assuming it
 
-Inspector `global.scale`, `tracking`, `line_spacing`, `h_align` / `v_align` and
-`margins` move the glyphs before the script runs. Place, align and space
-characters from measurements — `mt.layout.measure_bounds_2d`, `geometry.*`, and
-the canvas-normalized `ctx.font.ascent` / `descent` / `line_height` — and express
-distances that should follow the glyphs in those terms rather than as fixed canvas
-fractions. (`ctx.font.units_per_em` is a conversion factor, not a distance.)
+Inspector `ctx.global.scale`, `tracking`, `line_spacing`, `h_align` / `v_align`, and `margins` move the glyphs before `OnLayout` runs. Place, align, and space characters from measurements — `mt.layout.measure_bounds_2d`, `geometry.*`, and the canvas-normalized `ctx.font.em_size` / `ascent` / `descent` / `line_height` — and express distances that should follow the glyphs in those terms rather than as fixed canvas fractions. (`ctx.font.units_per_em` is a font design-unit conversion factor, not a canvas distance.)
 
 ### Moving something to a measured position
 
-Act on positions measured with `measure_bounds_2d` or `get_canvas_position_2d`
-through `place_2d` (or `pivot_at_2d` for pivots), never by writing them into
-`offset_*`:
+ Distinguish pre-global and post-global coordinate spaces:
+
+- Pre-global space (before `ctx.global` scale, stretch, rotation, and position): `character.geometry.*`, `part.geometry.*`, `ctx.font.*`, and `character.offset_*` / `part.offset_*`. Pre-global deltas (such as `ctx.font.line_height` or `character.geometry.advance_x`) can be added directly to `offset_*`; `ctx.global.scale` and `ctx.global.rotation` then transform them automatically (multiply by `ctx.global.stretch_x` / `stretch_y` only if you want to follow global stretch).
+- Post-global space (after the complete `global` -> `character` -> `part` 2D hierarchy, before 3D projection and deformation): `mt.layout.measure_bounds_2d` and `mt.layout.get_canvas_position_2d`. Never write a post-global delta directly into `offset_*` (it would be scaled and rotated a second time by `ctx.global`). Always apply post-global positions through `mt.layout.place_2d(ctx, item, canvasX, canvasY)` or `mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY)`:
 
 ```lua
 -- Align a run so its right edge lands on targetX.
@@ -317,39 +289,24 @@ for _, index in ipairs(run) do
 end
 ```
 
-Those measurements are post-global and `offset_*` is pre-global, so a measured
-delta written there is off by `global.scale` — silently wrong unless it is `1.0`.
-`geometry.*` and `ctx.font.*` are pre-global and go into `offset_*` directly
-(`global.scale` then applies for free; apply `stretch_*` only to follow it).
-Multiply them by `global.scale` and stretch before comparing with
-`measure_bounds_2d`.
+When measuring text bounds to place a decoration or frame that should rotate together with `ctx.global.rotation`, pass `"before_global_rotation"` as the fourth argument (`mt.layout.measure_bounds_2d(ctx, targets, "character", "before_global_rotation")`), which removes `ctx.global.rotation` around the global position+pivot while keeping `ctx.global.scale` and `stretch_*`. To compare pre-global metrics (`geometry.*`, `ctx.font.*`) with `measure_bounds_2d`, multiply the pre-global values by `ctx.global.scale` (and `ctx.global.stretch_x` / `stretch_y`).
 
 ### Angles in detail
 
-- **2D `rotation`** — positive is clockwise.
-- **Object `yaw` / `pitch`** (global, character, part) — rotate about the item's
-  own pivot. `yaw` positive turns the right edge toward the viewer (`-Z`);
-  `pitch` positive turns the top edge toward the viewer.
-- **Camera `yaw` / `pitch`** — orbit the look-at target. `yaw` positive moves the
-  camera to the **right** of the target, so the subject appears to turn left.
-  `pitch` positive moves the camera **up**, looking down at the subject.
-- **`gradient.angle`** — `0` runs left to right (`+X`), increasing is clockwise.
-- **`shadow.angle`** — `0` casts right (`+X`), increasing is clockwise, `90` is
-  straight down.
+- `rotation` (2D, on `global`, `character`, `part`, `shape`): positive is clockwise (`90` turns what pointed up `+Y` to point right `+X`). When computing a heading from Y-up coordinates via `math.deg(math.atan(dy, dx))` (which is counterclockwise-positive), negate the angle before assigning to `rotation`, or use `path:at_distance(ratio)` from `mt.path.arc_length`, which already returns headings in clockwise screen convention.
+- `mt.polar_offset_2d(angleDegrees, radius)`: takes a clockwise angle (`0` = right `+X`, `90` = down `-Y`, `-90` = up `+Y`) and returns `dx, dy` in Y-up canvas offset units, ready to add to `offset_x` and `offset_y`.
+- Object `yaw` / `pitch` (`ctx.global`, `ctx.chars[i]`, `ctx.parts[i]`, `ctx.shapes[i]`): rotate the object about its own pivot. Positive `yaw` turns the right edge toward the viewer (`-Z`); positive `pitch` turns the top edge toward the viewer (`-Z`).
+- Camera `yaw` / `pitch` (`ctx.camera`, `ctx.shape_cameras[i]`): orbit the camera around `target_x` / `target_y`. Positive `yaw` moves the camera to the right of the target (so the subject appears to turn left); positive `pitch` moves the camera up (looking down at the subject).
+- `ctx.global.gradient.angle`: `0` runs left to right (`+X`), positive rotates clockwise (`90` = top to bottom, `-90` or `270` = bottom to top).
+- `ctx.global.shadow.angle`: `0` casts right (`+X`), positive rotates clockwise (`90` = straight down).
 
 ### Aspect ratio
 
-For circular or radial effects use `mt.layout.radial_distance(ctx, x, y)`, which
-corrects for canvas aspect. For manual directional math, multiply the X difference
-by `ctx.canvas.aspect_ratio` (and `ctx.canvas.pixel_aspect_ratio` for non-square
-pixels).
+Because X is normalized by canvas width and Y by canvas height, equal numeric deltas in X and Y are not equal pixel distances on a non-square canvas. For circular or radial falloffs use `mt.layout.radial_distance(ctx, x, y, centerX, centerY)`, which corrects for canvas aspect ratio. For manual directional math, multiply X differences by `ctx.canvas.aspect_ratio` (and `ctx.canvas.pixel_aspect_ratio` for non-square pixels), or divide X radius by `ctx.canvas.aspect_ratio` when laying out a circle in canvas coordinates.
 
 ### Reflow after character scaling
 
-Changing `scale` or `stretch_*` does not change the advance, so scaled characters
-overlap or leave gaps. Call `mt.layout.reflow(ctx)` afterwards instead of
-computing advances by hand; it re-typesets under the current scale and stretch
-and keeps the user's tracking and shaped spacing.
+Changing `character.scale` or `character.stretch_*` does not update character advances, so scaled characters overlap or leave gaps. Call `mt.layout.reflow(ctx, gap?, config?)` after modifying character scales/stretches instead of computing advances by hand; it re-typesets from exact horizontal or vertical typesetting origins while preserving shaped spacing, tracking, and margins.
 
 ```lua
 function OnLayout(ctx)
@@ -363,16 +320,17 @@ end
 
 ## 5. Time and transitions
 
-Use `mt.timeline.intro_outro_seconds` or `mt.timeline.remaining` for
-fixed-duration intro/outro transitions. Requested durations compress only when
-their sum exceeds the clip duration.
+Timing selection guide:
+
+- Fixed-duration intro and outro: `local intro, outro = mt.timeline.intro_outro_seconds(ctx, introSeconds, outroSeconds, fallbackDuration?)`. Returns `intro` (`0` -> `1` over the first `introSeconds`) and `outro` (`0` -> `1` over the last `outroSeconds`). Requested durations compress proportionally only when `introSeconds + outroSeconds` exceeds the clip duration.
+- Remaining time until clip end: `mt.timeline.remaining(ctx, fallbackDuration?)` returns remaining seconds.
+- Local time window: `mt.timeline.window_progress(ctx, startSeconds, durationSeconds)` returns clamped `0`–`1` linear progress inside `[startSeconds, startSeconds + durationSeconds]`. `mt.timeline.window_ctx(ctx, startSeconds, durationSeconds)` returns a derived `ctx` remapped to that window.
+- Multi-stage sequential choreography: `mt.timeline.chain(ctx, initialValue, segments, options?)` evaluates pure-function stage segments sequentially (each segment receives `(segmentCtx, previousValue)` and can be an active `{ duration = ..., run = function(segCtx, state) ... end }` or a hold `{ hold = "remaining" | seconds }`), passing each completed segment's final return value to the next.
+- Piecewise keyframe curves: `mt.keyframes(keys, time)` interpolates numeric or RGBA color keyframe tables `{ { t = 0.0, v = 0.0, ease = "out_cubic" }, { t = 1.0, v = 1.0 } }`.
 
 ### Filtered and staggered intro/outro
 
-`mt.each_char` supplies filtering, ordering and normalized `info.progress`, which
-`mt.stagger_progress` turns into per-character timing (see Complete example). A
-numeric loop is fine for a simple full traversal. Seed random ordering with
-`ctx.meta.instance_seed` so clip instances do not repeat the same pattern:
+`mt.each_char(ctx, options?)` and `mt.each_part(ctx, options?)` supply filtering (`from`, `to`, `from_char`, `to_char`, `line`), ordering (`order = "asc" | "desc" | "center" | "random"`, `seed`), and a reusable `info` table (`progress`, `n`, `count`, `first`, `last`, plus `char`, `char_index`, `index_in_char` on `mt.each_part`). Note that `info` is reused across iterations — copy fields out if you need to store them. Pass `info.progress` into `mt.stagger_progress(progress, info.progress, span)` (where `span` in `0.0`–`1.0` controls overlap and guarantees every element finishes at `progress == 1.0`). For time-based stagger by index, use `mt.stagger(time, index, delay, duration)` or `mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?)`. Seed random ordering or random stagger with `ctx.meta.instance_seed` so multiple clip instances do not repeat the identical random pattern:
 
 ```lua
 local options = { order = "random", seed = ctx.meta.instance_seed }
@@ -383,27 +341,21 @@ end
 
 ## 6. Colors, gradients and textures
 
-A color is `{ r = 1.0, g = 0.5, b = 0.0, a = 1.0 }`, each component `0.0`–`1.0`.
-Partial assignment merges with the current value; unknown keys raise an error.
+A color is `{ r = 1.0, g = 0.5, b = 0.0, a = 1.0 }`, each component `0.0`–`1.0`. Partial assignment merges with the current value; unknown keys raise an error.
 
 ```lua
 character.fill.color = { a = 0.5 }        -- keeps r/g/b, changes alpha only
 character.fill.color.a = character.fill.color.a * 0.5
 ```
 
-RGBA is the storage format. Calculate derived colors in the OKLab family:
+RGBA is the storage format. Calculate derived colors in the OKLab perceptual family:
 
-- Blending: `mt.color.lerp_oklab`; perceptually uniform, no muddy midpoint.
-- Hue travel: `mt.color.lerp_oklch`; shortest path by default, fourth argument
-  "long" takes the longer path. `lerp_oklab` may pass near the neutral axis.
-- Per-character hue sequences: `from_oklch` or `from_okhsl`.
-- Changing one component: decompose with `to_oklch`, rebuild with `from_oklch`.
-- Lightness: `mt.color.from_okhsl` / `to_okhsl`, where `lightness = 1.0` is white
-  and `0.0` black. OKHSV `value = 1.0` is the most vivid color, not white; use
-  OKHSV only for HSV-like value semantics, and prefer `from_okhsv` over the
-  compatibility-only `from_hsv`.
-- `mt.color.lerp`: only for exact sRGB component interpolation or alpha-only
-  changes.
+- Blending two colors: `mt.color.lerp_oklab(from, to, t)` — perceptually uniform, no muddy midpoint.
+- Hue travel / rainbow transitions: `mt.color.lerp_oklch(from, to, t, hueMethod?)` — shortest hue path by default; pass `"long"` as the 4th argument to travel the long way around the hue wheel (`lerp_oklab` may pass near the neutral axis).
+- Per-character hue sequences: `mt.color.from_oklch(lightness, chroma, hueDegrees, alpha?)` or `mt.color.from_okhsl(hue01, saturation01, lightness01, alpha?)`.
+- Modifying one perceptual component of an existing color: decompose with `mt.color.to_oklch(color)` / `to_okhsl(color)` / `to_oklab(color)`, adjust the field, and rebuild with `from_oklch` / `from_okhsl` / `from_oklab`.
+- Lightness adjustments (tinting toward white or black): use `mt.color.from_okhsl` / `to_okhsl`, where `lightness = 1.0` is pure white and `0.0` is black. Do not use OKHSV for lightness: in `from_okhsv` / `to_okhsv`, `value = 1.0` is the most vivid saturated color, not white; use OKHSV only when HSV-like value semantics are wanted, and always prefer `from_okhsv` over compatibility-only `from_hsv`.
+- `mt.color.lerp`: use only for exact linear sRGB channel interpolation or alpha-only changes (`mt.color.with_alpha(color, alpha)` copies a color with a new alpha).
 
 ```lua
 character.fill.color = mt.color.lerp_oklab(fromColor, toColor, t)
@@ -412,63 +364,63 @@ character.fill.color = mt.color.lerp_oklch(redColor, blueColor, t)
 
 ### Gradient coordinates
 
-`start_position` / `end_position` are **not** canvas coordinates but ratios along
-the `angle` direction across the whole text's bounding box *after* transforms:
-`0.0`/`1.0` spans edge to edge, `0.2`/`0.8` starts 20% inward from each edge.
-`angle = 0` is left-to-right, `90` top-to-bottom, `-90` (or `270`) bottom-to-top.
-The fill color sits at `start_position` and `end_color` at `end_position`;
-`start_position` greater than `end_position` reverses the ramp, like rotating
-`angle` by 180. Under 3D the box is the projected canvas-space text bounds,
-updated by camera and pose changes, while the angle stays aligned to the canvas
-axes, so Z rotation moves the text through the gradient rather than rotating it.
+`ctx.global.gradient.start_position` and `end_position` are not canvas coordinates; they are ratios along the `angle` direction across the whole text's bounding box *after* transforms:
+
+- `0.0` / `1.0` spans edge to edge of the transformed text bounding box; `0.2` / `0.8` starts 20% inward from each edge.
+- `angle = 0` runs left-to-right (`+X`), `90` top-to-bottom, `-90` (or `270`) bottom-to-top.
+- `ctx.global.fill.color` sits at `start_position` and `ctx.global.gradient.end_color` at `end_position`; setting `start_position > end_position` reverses the ramp (equivalent to rotating `angle` by `180`).
+- Under 3D projection, the bounding box is the projected canvas-space text bounds (updated by camera and pose changes), while `angle` stays aligned to the 2D canvas axes, so Z rotation moves the text through the gradient rather than rotating the gradient axis.
+- `ctx.global.gradient.color_space` values: `"none"`, `"oklab"`, `"oklch_short"`, `"oklch_long"`, `"okhsl"`, `"okhsv"`, `"linear_rgb"`, `"crayon"`.
 
 ### Textures
 
-A texture states what the letters are made of. **Choose one only when the user
-asked for that look or named a material**; a request to move, time or arrange
-text is not a reason to add one. `none` is usually right.
+A texture states what the letters are made of. **Choose one only when the user asked for that look or named a material**; a request to move, time, or arrange text is not a reason to add one. `"none"` is the default and is usually right.
 
-`texture.p1`–`p4` are slots named by `texture.type`, in order `p1`, `p2`, `p3`, `p4`:
+`texture.p1`–`p4` are material control slots whose meaning depends on `texture.type`, in order `p1`, `p2`, `p3`, `p4`:
 
-- `water_droplet`: thickness, roundness, gloss, light angle
-- `air_cushion`: inflation, seal width, wrinkles, light angle
-- `glitter`: flake size, highlight ratio, flake amount, light angle
-- `iridescent`: film thickness, hue range, strength, light angle
-- `faceted`: facet count, bevel depth, polish, light angle
-- `stained_glass`: piece size, lead width, hue range, glow
-- `metallic`: polish, relief, reflection contrast, light angle
-- `metallic_2`: polish, relief, exposure, light angle
+- `water_droplet`: `p1` = thickness, `p2` = roundness, `p3` = gloss, `p4` = light angle (degrees).
+- `air_cushion`: `p1` = inflation, `p2` = seal width, `p3` = wrinkles, `p4` = light angle (degrees).
+- `glitter`: `p1` = flake size (`0` removes flakes), `p2` = highlight ratio (`0` lights none, `1` lights all, placement fixed), `p3` = flake amount (`0` removes all flakes and glow, `1` full density; remaining flakes keep positions and colours), `p4` = light angle (degrees). `texture.color` is the metal colour; hue spread is fixed at full range around it. Lit flakes have a bright core and soft glow within the text outline.
+- `iridescent`: `p1` = film thickness, `p2` = hue range, `p3` = strength, `p4` = light angle (degrees). Ignores `texture.color`.
+- `faceted`: `p1` = facet count, `p2` = bevel depth, `p3` = polish, `p4` = light angle (degrees).
+- `stained_glass`: `p1` = piece size (relative to untransformed character), `p2` = lead width (`0` removes lead), `p3` = hue range (spreads from the fill colour underneath), `p4` = glow (`0.0`–`1.0`: `0.5` is plain glass, above `0.5` emits light, **below `0.5` darkens toward `0`**). `texture.color` is **the lead colour**.
+- `metallic`: `p1` = polish (`0` matte, `1` mirror), `p2` = relief, `p3` = reflection contrast, `p4` = light angle (degrees). Takes the metal colour from the **fill** and uses `texture.color` as the light colour.
+- `metallic_2`: `p1` = polish (`0` matte, `1` mirror), `p2` = relief, `p3` = exposure (`0.5` is neutral studio brightness), `p4` = light angle (degrees). Takes the metal colour from the **fill** and uses `texture.color` as the light colour.
 
-Slot values are `0.0`–`1.0`, except light angles in degrees (which is why the
-field reference says `unitless`). `texture.color` tints added light unless noted.
-
-- `glitter`: `texture.color` is the metal colour; hue spread is fixed at full range
-  around it. Flake size `0` removes flakes. Highlight ratio `0` lights no flakes,
-  `1` all, with placement fixed. Flake amount `0` removes all flakes and glow, `1`
-  keeps full density; remaining flakes keep positions and colours. Lit flakes
-  have a bright core and soft glow within the text outline.
-- `stained_glass`: hue comes from the fill; `texture.color` is **the lead colour**;
-  lead width `0` removes the lead; glow `0.5` is plain glass, `1` emits, **`0` goes
-  dark**.
-- `iridescent` ignores `texture.color`.
-- `metallic` / `metallic_2` take the metal colour from the **fill**; `metallic_2`
-  exposure is neutral at `0.5`.
-- On a character or part, set `use = true`, or the inherited texture stays.
+Slot values `p1`–`p3` (and `stained_glass` `p4`) are `0.0`–`1.0` (clamped when drawn); light angles in `p4` are in degrees and wrap around (which is why the field reference marks `p1`–`p4` as `unitless`). Unless noted above, `texture.color` tints the light added on top of the fill (white leaves it untinted). On a character, part, or shape, set `texture.use = true` or the inherited texture stays.
 
 ## 7. Paths, text and drawing order
 
+### Choosing between Characters, Parts, Custom Glyphs, and Shapes
+
+Mug Typography provides four visual element types. Pick the one that matches the role of the element:
+
+1. `ctx.chars[i]` (Shaped text characters):
+   - Created automatically by shaping `ctx.global.text` (up to `ctx.meta.limits.max_characters`).
+   - Affected by `ctx.global` transforms, `ctx.camera` 3D projection, `mt.layout.reflow`, `mt.layout.measure_bounds_2d`, `mt.layout.pivot_at_2d`, `mt.layout.match_pose`, Write-On, Gradient, Bounding Box, Inspector Deform, Crayon, and `ctx.output.manual_order_text`.
+   - Note: `character.z_index` is ignored on text characters (use `ctx.output.manual_order_text` for 2D text draw order, or `ctx.chars[i].z` / `ctx.parts[i].z` for 3D depth).
+2. `ctx.parts[i]` (Sub-character glyph components):
+   - Created automatically from each character's decomposed solid contours (holes stay attached to their owning solid; up to `ctx.meta.limits.max_parts`).
+   - Nested inside `ctx.chars[i]` (`i = part.character_index`); inherits transform and style from its owning character.
+   - Reached via `mt.each_part(ctx)` or `character.part_start` / `character.part_count` in `OnLayout`, and via `ctx.paths` in `OnPath` for outline point editing (`part.path:map_points`, `set_svg`, etc.).
+3. `ctx.glyphs:declare` (Custom glyphs inserted into `ctx.global.text`):
+   - Declared in `OnPreLayout` and concatenated into `ctx.global.text`. Becomes an ordinary `ctx.chars[i]` / `ctx.parts[i]` element (consumes a character and part slot).
+   - Follows `ctx.global` transforms and `ctx.camera`, participates in Write-On, Gradient, Bounding Box, Deform, Crayon, `mt.layout.measure_bounds_2d`, `mt.layout.match_pose`, and `ctx.output.manual_order_text`.
+   - Use when a custom vector symbol must flow inline with text, rotate with `ctx.global.rotation`, or participate in text-only effects (such as Write-On or Deform).
+4. `ctx.shapes:declare` (Standalone shapes apart from the text):
+   - Declared in `OnPreLayout` (up to `ctx.meta.limits.max_shapes` = 1024; uses **zero** character or part slots, works even when `ctx.global.text == ""`).
+   - Drawn in `"back"` (behind all text) or `"front"` (in front of all text), ordered within its layer by `shape.z_index`.
+   - Supports parent-child transform hierarchies (`parent = earlierShapeNumber`) for jointed rigs/trees, and dedicated 3D cameras (`ctx.shape_cameras:declare()`).
+   - **Ignores** `ctx.global` 2D/3D transforms and `ctx.camera` (a zero `ctx.global.scale` does not hide shapes), and is skipped by Write-On, Gradient, Bounding Box, Deform, Crayon, and `manual_order_text`. Inherits global appearance (`fill`, `stroke`, `shadow`, `blur`, `texture`), overridable via `shape.<style>.use = true`.
+   - Use for backgrounds, screen frames, particles, gauges, and jointed character scenes that should not consume character slots or shift text layout.
+
 ### Inspector text and line breaks
 
-Inspector text is interpreted once before `OnPreLayout`: `\n` and `<br>` forms and
-CRLF become LF; escaped `\\n` and `\<br>` remain literal `\n` and `<br>`.
-`ctx.global.text` receives the result. Script-written text is not
-decoded again, so use actual LF. Custom glyphs are inserted before shaping; line
-breaks are excluded from `ctx.chars`.
+Inspector text is interpreted once before `OnPreLayout`: `\n` and `<br>` forms and CRLF become LF; escaped `\\n` and `\<br>` remain literal `\n` and `<br>`. `ctx.global.text` receives the result. Script-written text is not decoded again, so use actual LF (`"\n"`). Custom glyphs are inserted before shaping; line breaks are excluded from `ctx.chars`.
 
 ### Methods are called with a colon
 
-`ctx.paths`, `ctx.glyphs` and `path` members are **methods**; calling them with a
-dot fails.
+`ctx.paths`, `ctx.glyphs`, `ctx.shapes`, `ctx.shape_cameras`, `MtArcLengthPath` (`path:length()`, `path:at_distance()`), and `MtDrawingPath` (`path:clear()`, `path:move_to()`, etc.) members are **methods**; calling them with a dot fails at runtime.
 
 ```lua
 local parts = ctx.paths:select("c1, p8-10, !p9")   -- RIGHT
@@ -478,64 +430,35 @@ path:move_to(0, 0)                                 -- RIGHT
 
 ### Part selector grammar
 
-`ctx.paths:select(selector)`: `c` = character number, `p` = global part number,
-a bare number = part number, `!` = exclude; commas or spaces separate conditions.
-Ranges like `c3-5` / `p8-10` are inclusive, and a bare endpoint takes the other
-endpoint's prefix. Exclusions apply wherever they appear, and a selector with only
-exclusions selects nothing. Results come in ascending part order; selecting the
-same part twice in a frame returns the same mutable object.
+`ctx.paths:select(selector)`: `c` = character number, `p` = global part number, a bare number = part number, `!` = exclude; commas or spaces separate conditions. Ranges like `c3-5` / `p8-10` are inclusive, and a bare endpoint takes the other endpoint's prefix. Exclusions apply wherever they appear, and a selector with only exclusions selects nothing. Results come in ascending part order; selecting the same part twice in a frame returns the same mutable object.
+
+`mt.target.chars(ctx, spec, options?)` / `mt.target.parts(ctx, spec, options?)` (`OnLayout` / `OnPath`, API level 13) resolve the same grammar to ascending integer arrays for `ipairs`. `chars` returns character numbers (a character is listed when any of its parts is selected) and treats a bare number as a character; `parts` returns global part numbers and treats a bare number as a part. `options.empty` is `"none"` (default) or `"all"` for a spec that selects nothing; exclusions still apply.
 
 ### Shape drawing is Y-DOWN; shape placement is Y-UP
 
-Coordinates that draw a shape are **Y-down**: path editing (part center origin,
-1000 units = 1 em, independent of canvas resolution) and drawing-space fill
-offsets. Coordinates and metrics that place a shape are **Y-up**: position,
-offset, pivot, geometry bounds/origins/advances, custom-glyph bounds/advances.
+Coordinates that draw a shape are **Y-down**: path editing (`MtDrawingPath`, origin at part center or shape position, `1000` units = `1` em, independent of canvas resolution) and drawing-space bounding-box offsets (`ctx.bounding_box.fill_offset_y`, `stroke_offset_y`). Coordinates and metrics that place a shape are **Y-up**: position, offset, pivot, geometry bounds/origins/advances, and custom-glyph `bounds` / `advance_*`.
 
-`ctx.paths` is rebuilt every frame, so apply path edits every frame; untouched
-parts keep their glyph outline.
+`ctx.paths` is rebuilt every frame, so apply path edits every frame; untouched parts keep their glyph outline.
 
 ### Custom glyphs
 
-`ctx.glyphs:declare(declaration)` (`OnPreLayout` only) returns a one-character
-placeholder string to insert into `ctx.global.text`. Declaration fields:
+`ctx.glyphs:declare(declaration)` (`OnPreLayout` only) returns a one-character placeholder string to insert into `ctx.global.text`. Declaration fields:
 
-- `path`: `MtDrawingPath`; part-center origin, Y-down, 1000 units = 1 em;
-  snapshotted at declaration. Omit it for an invisible glyph.
-- `advance_x` / `advance_y`: default `0`; Y-up, 1000 units = 1 em; downward
-  vertical flow is negative.
-- `bounds`: `{minX, minY, maxX, maxY}`, baseline origin, Y-up, 1000 units = 1 em.
-  Omitted: `{advance_x/2 + pathMinX, 0, advance_x/2 + pathMaxX, pathMaxY - pathMinY}`
-  (path bottom on the baseline). The bounds center becomes the part center.
+- `path`: `MtDrawingPath`; part-center origin, Y-down, `1000` units = `1` em; snapshotted at declaration. Omit it for an invisible glyph.
+- `advance_x` / `advance_y`: default `0`; Y-up, `1000` units = `1` em; downward vertical flow is negative.
+- `bounds`: `{minX, minY, maxX, maxY}`, baseline origin, Y-up, `1000` units = `1` em. Omitted: `{advance_x/2 + pathMinX, 0, advance_x/2 + pathMaxX, pathMaxY - pathMinY}` (path bottom on the baseline). The bounds center becomes the part center.
 
-A placeholder is an ordinary character: it occupies a `ctx.chars` / `ctx.parts`
-index (shifting later ones), counts toward the limits, inherits
-fill/stroke/shadow/texture, and takes part in `mt.each_char`, `mt.layout.reflow`
-and write-on. In `OnLayout`, find it with `ctx.chars[i].text == placeholder`.
+A placeholder is an ordinary character: it occupies a `ctx.chars` / `ctx.parts` index (shifting later ones), counts toward the limits, inherits `fill` / `stroke` / `shadow` / `texture` / `blur`, and takes part in `mt.each_char`, `mt.layout.reflow`, and Write-On. In `OnLayout`, find it with `ctx.chars[i].text == placeholder`.
+
+A backdrop, frame, or light spot that need not behave like text is simpler as a shape (see "Shapes apart from the text"): it needs none of the steps below. Use a custom glyph only when the decoration must stay a character.
 
 Decoration that must not move the text:
 
-1. Alignment: declared bounds join the box `h_align` / `v_align` align against.
-   Declare `bounds = {0, 0, 0, 0}` (any zero-area box) so the glyph draws without
-   measuring. A negative `margins` entry cannot fix alignment drift.
-2. Spacing: `tracking` and `margins[i]` are added after every glyph, including a
-   zero-advance one, and each line is aligned by that width, so placeholders at
-   the end of a text line still shift it under center or right alignment. Put them
-   on a line of their own (`text .. "\n" .. placeholders`); with zero-area bounds
-   that line has nothing to align, and the text does not move at all.
-3. Position: do not rely on the pen position. In `OnLayout`, measure the text
-   with `mt.layout.measure_bounds_2d` and move the placeholder with
-   `mt.layout.place_2d` (its anchor is its ink center).
-4. Paint order: without ordering, characters paint in text order, so a trailing
-   placeholder paints in front of the text. For a backdrop, set
-   `ctx.output.manual_order_enabled = true` and list the placeholder first in
-   `manual_order_text` (painted first = behind); write-on then reveals it first.
-   In 3D, view depth decides before manual order.
-5. Only if the placeholder must sit inside a text line, cancel its trailing spacing in
-   `OnPreLayout` with `ctx.global.margins[i] = -ctx.global.tracking` (both em),
-   where `i` is 1 + the number of non-newline characters before it. This holds
-   only when each code point shapes to one character (no ligatures, combining
-   marks or emoji sequences).
+1. Alignment: declared bounds join the box `h_align` / `v_align` align against. Declare `bounds = {0, 0, 0, 0}` (any zero-area box) so the glyph draws without measuring. A negative `margins` entry cannot fix alignment drift.
+2. Spacing: `tracking` and `margins[i]` are added after every glyph, including a zero-advance one, and each line is aligned by that width, so placeholders at the end of a text line still shift it under center or right alignment. Put them on a line of their own (`text .. "\n" .. placeholders`); with zero-area bounds that line has nothing to align, and the text does not move at all.
+3. Position: do not rely on the pen position. In `OnLayout`, measure the text with `mt.layout.measure_bounds_2d` and move the placeholder with `mt.layout.place_2d` (its anchor is its ink center).
+4. Paint order: without ordering, characters paint in text order, so a trailing placeholder paints in front of the text. For a backdrop, set `ctx.output.manual_order_enabled = true` and list the placeholder first in `manual_order_text` (painted first = behind); Write-On then reveals it first. In 3D, view depth decides before manual order.
+5. Only if the placeholder must sit inside a text line, cancel its trailing spacing in `OnPreLayout` with `ctx.global.margins[i] = -ctx.global.tracking` (both em), where `i` is `1` + the number of non-newline characters before it. This holds only when each code point shapes to one character (no ligatures, combining marks, or emoji sequences).
 
 ```lua
 local badge = mt.svg_path("M 0 0 L 24 0 L 24 24 L 0 24 Z", { view_box = { 0, 0, 24, 24 }, em_scale = 1.4 })
@@ -564,55 +487,81 @@ function OnLayout(ctx)
 end
 ```
 
+### Shapes apart from the text
+
+A shape is something placed apart from the text: a background, frame, or decoration. Use it instead of a custom glyph whenever the thing must not take part in layout, Write-On, Gradient, Bounding Box, Deform, or Crayon.
+
+- `ctx.shapes:declare({ path, layer, parent, camera })` (`OnPreLayout` only): returns the 1-based shape number, in declaration order.
+- `path`: `MtDrawingPath`; origin at the shape position, Y-down, `1000` units = `1` em; snapshotted at declaration. Omit it for an empty path. Draw the outline around the origin: the origin is the point the shape rotates, scales, and pivots about, not the middle of its outline. To turn about another point (a pendulum, a clock hand), offset the path from the origin. `mt.svg_path` with `view_box` puts the view box center at the origin.
+- `layer`: `"back"` (default, behind the text) or `"front"`. Shapes of one layer overlap from the lowest `z_index`, and in declaration order when `z_index` is equal.
+- `parent`: the number of a shape declared earlier (anything else raises an error); omit it for no parent. A child is placed relative to its parent: its `offset_*`, `rotation`, `scale`, `stretch_*`, and `pivot_*` work in the parent's transformed space, so `offset_x = 0.5`, `offset_y = 0.5` puts the child on the parent's position and the parent's turn, scale, and stretch carry the child along. A child can be a parent too. Only the transform is inherited, not `opacity`, `fill`, `stroke`, `shadow`, `blur`, or `texture`. A parent with `scale = 0` leaves its children no size. Only a shape can be a parent, never a text character.
+- `camera`: a number returned by `ctx.shape_cameras:declare()`; omit it for none. A shape with a camera is projected in 3D by that camera. A shape with none stays 2D on the canvas, and its `z`, `yaw`, and `pitch` have no effect. A child takes its parent's camera; naming a different number raises an error; a child of a shape with no camera cannot name one.
+- Shapes are not in `ctx.global.text`: `ctx.chars`, `ctx.char_count`, `ctx.parts`, and `ctx.part_count` count the text only; read shapes with `ctx.shapes[number]` and `ctx.shape_count` in `OnLayout` and `OnPath`.
+- `ctx.shapes[number]` fields: `index` (the shape number), `parent` (read-only, `0` for none), `camera` (read-only, `0` for none), `offset_x` / `offset_y` (`0.5` is no offset; an untouched root shape is at the canvas center), `pivot_x` / `pivot_y`, `scale`, `stretch_x` / `stretch_y`, `rotation`, `z`, `yaw`, `pitch`, `opacity`, `z_index`, `fill`, `stroke`, `shadow`, `texture`, `blur`, and `path` (`OnLayout` only), written like `ctx.chars[index]`.
+- `z_index` (number, default `0`, set in `OnLayout` every frame): orders the shapes of one layer from the lowest; a higher value is drawn in front and equal values keep declaration order. It never moves a shape across the text, and it is independent of `parent`, so a parent can be painted over its child. NaN raises an error. Text characters ignore `z_index`.
+- `ctx.shapes[number].path` (`OnLayout` only): starts each frame as the declared path. Edit it in place with `path:assign(p)`, `path:clear()`, `path:move_to()`, and the other `MtDrawingPath` methods; the `path` field itself cannot be reassigned. Edits apply to that frame and reset to the declared path on the next frame.
+- `ctx.paths:shape(number)` (`OnPath` only): returns a one-element array holding that shape's part, starting from the path `OnLayout` left. `ctx.paths:part`, `character`, and `select` reach the text only.
+- Full-screen sizing: one canvas height is `1000 / ctx.font.em_size` path units; the canvas width is `(1000 / ctx.font.em_size) * ctx.canvas.aspect_ratio`. Shapes ignore Global, so a full-screen path needs no inverse Global transform.
+- Layout helpers on shapes: `mt.layout.place_2d`, `get_canvas_position_2d`, and `canvas_to_offset_2d` accept a shape; the anchor is the shape position (the path origin). For a child they work through the parent's transform, and `place_2d` / `canvas_to_offset_2d` return the `offset` in the parent's space (raising an error when the parent's scale is `0`). `pivot_at_2d`, `measure_bounds_2d`, and `match_pose` do not accept shapes.
+- Isolation and limits: shapes ignore Global transforms and `ctx.camera` (the text's camera); only a shape camera projects them in 3D. They are skipped by Write-On, Gradient, Bounding Box, Deform, and Crayon, and cannot be listed in `manual_order_text`. They use no character or part limit; their limit is `ctx.meta.limits.max_shapes` (`1024`).
+- Appearance inheritance: the text's global appearance settings (color, stroke, shadow, blur, glow, texture) apply to shapes by default. Override the ones you do not want on `ctx.shapes[number]` in `OnLayout` (e.g. `shape.stroke.use = true; shape.stroke.width = 0.0`).
+
+#### Shape cameras (3D for shapes)
+
+- `ctx.shape_cameras` is separate from `ctx.camera` and moves only the shapes that name it. `ctx.shape_cameras:declare()` (`OnPreLayout` only) returns the 1-based camera number; at most `16` cameras per frame.
+- `ctx.shape_cameras[number]` (`OnLayout`, read and write) has `target_x`, `target_y`, `yaw`, `pitch`, `perspective`, `zoom`, `lens_shift_x`, `lens_shift_y`, with the meaning and units of the same `ctx.camera` fields. Every frame each camera starts from the text camera's defaults (`target_x = 0.5`, `target_y = 0.5`, `yaw = 0`, `pitch = 0`, `perspective = 0.5`, `zoom = 1`, `lens_shift_x = 0`, `lens_shift_y = 0`): write every field you want changed every frame. `perspective` is clamped to `0..1`. Every value must be finite; NaN or inf raises an error.
+- With `perspective = 0.5` and no `yaw` / `pitch` / `zoom` change, the camera is two canvas heights from the plane `z = 0`. A point at `z = 0` is seen where it is placed only when `target_x` / `target_y` are `0.5`. To scale a shape about its own place as it moves in depth, set `target_x` / `target_y` to that place (shares of the canvas) and `lens_shift_x` / `lens_shift_y` to the target minus `0.5`: points at `z = 0` then stay where they are and points nearer or farther grow or shrink about it.
+- `z` is a distance along the view direction in canvas heights, in the parent's space; positive is farther from the camera.
+- A shape's 3D pose order is: `scale` (across the shape's plane, x and y only), then `pitch`, then `yaw`, then `rotation` in the plane, then `offset`; a child's pose is carried by its parent's. `scale` does not scale depth, so under a scaled parent a rotated child shears. To keep what hangs from a rotated shape undistorted, size shapes in their paths and in the parent's-length part of their `offset`, and leave `scale` at `1`.
+- To make a child face the camera whatever its parent's pose, give it the `pitch`, `yaw`, and `rotation` of the rotation that undoes its parent's accumulated rotation (the transpose of the product of the poses of the ancestors; read the three angles back in the pose's order). This is exact only while every ancestor has `scale = 1`.
+- Paint order under a shape camera: shapes under one camera, in one layer and at one `z_index`, are painted farthest first. Equal depths keep declaration order, which rounding can flip, so give parts that must keep an order their own `z_index`. Shapes of different cameras, or with none, are ordered only by layer, `z_index`, and declaration order.
+- A shape whose pose or camera cannot be carried out in numbers (non-finite, or so large it overflows) is not drawn, and the rest of the frame is unaffected.
+
+```lua
+local rectangle = mt.svg_path("M -500 -300 L 500 -300 L 500 300 L -500 300 Z")
+local background
+
+function OnPreLayout(ctx)
+    background = ctx.shapes:declare({ path = rectangle })
+end
+
+function OnLayout(ctx)
+    local shape = ctx.shapes[background]
+    shape.fill.use = true
+    shape.fill.color = { r = 0.1, g = 0.1, b = 0.3, a = 1.0 }
+    shape.stroke.use = true
+    shape.stroke.width = 0.0
+end
+```
+
 ### Glyph-less characters report their font cell
 
-A space's `geometry.bounds_*` is its font cell: its own advance along the flow
-axis, and the cell height (horizontal) or column width (vertical) across it. Its
-`bounds_center_*` lines up with its neighbors, so positioning against
-`bounds_center_*` or `mt.layout.match_pose` needs no special case for spaces.
+A space's `geometry.bounds_*` is its font cell: its own advance along the flow axis, and the cell height (horizontal) or column width (vertical) across it. Its `bounds_center_*` lines up with its neighbors, so positioning against `bounds_center_*` or `mt.layout.match_pose` needs no special case for spaces.
 
 ### `ctx.global.margins`
 
-A 1-based dense array indexed like `ctx.chars`. `margins[i]` is added in em,
-together with `tracking`, to the advance **after** character i. Non-integer or
-string keys, holes and non-number elements raise an error. Any length is
-allowed: missing entries add nothing, and entries past the last character are unused.
+A 1-based dense array indexed like `ctx.chars`. `margins[i]` is added in em, together with `tracking`, to the advance **after** character `i`. Non-integer or string keys, holes, and non-number elements raise an error. Any length is allowed: missing entries add nothing, and entries past the last character are unused.
 
-`utf8.len(ctx.global.text)` may differ from the shaped character count
-(combining marks, ligatures, grapheme clusters); do exact-count work in `OnLayout`.
+`utf8.len(ctx.global.text)` may differ from the shaped character count (combining marks, ligatures, grapheme clusters); do exact-count work in `OnLayout`.
 
 ### `ctx.output.manual_order_text`
 
-Tokens separated by commas or spaces; invalid tokens are ignored, and a part
-listed twice uses its first occurrence.
+Tokens separated by commas or spaces (or built safely from encoded integer entries via `mt.order_text({ mt.CHAR + i, mt.PART + p })`); invalid tokens are ignored, and a part listed twice uses its first occurrence:
 
-- `c<n>`: 1-based character n; expands to all its parts in the current part order.
-- `p<n>`: 1-based global part n.
+- `c<n>`: 1-based character `n`; expands to all its parts in the current part order.
+- `p<n>`: 1-based global part `n`.
 - `<n>`: no prefix; a part index.
-- `<a>-<b>`: inclusive range; a bare endpoint takes the other endpoint's prefix,
-  and mixed `c`/`p` endpoints are invalid; expands ascending.
+- `<a>-<b>`: inclusive range; a bare endpoint takes the other endpoint's prefix, and mixed `c`/`p` endpoints are invalid; expands ascending.
 
-Listed elements move to the front in the given order; **unlisted parts are not
-hidden** and follow in their base order. The order comes from the undeformed
-layout, not animated positions. Visibility is controlled by `write_on_start` /
-`write_on_end`, not by manual order.
+Listed elements move to the front of the draw/reveal queue in the given order; **unlisted parts are not hidden** and follow in their base order. The order comes from the undeformed layout, not animated positions. Visibility is controlled by `write_on_start` / `write_on_end`, not by manual order.
 
-Front means painted first, so listed elements end up **behind** the rest: list
-the backdrop, not the text. Characters are ranked by their best part rank and
-painted as one block, so `p<n>` also moves the character owning part n.
+Front of the queue means painted first, so listed elements end up **behind** the rest: list the backdrop, not the text. Characters are ranked by their best part rank and painted as one block, so `p<n>` also moves the character owning part `n`.
 
-2D painting follows manual order. In 3D, view depth is primary; manual order,
-stroke order, then layout order break equal-depth ties. Write-on reveal follows
-manual order in both.
+2D painting follows manual order. In 3D, view depth is primary; manual order, stroke order, then layout order break equal-depth ties. Write-On reveal follows manual order in both 2D and 3D.
 
 ## 8. Script metadata header
 
-Leading Lua comments configure the simulator and host; they are not runtime API.
-The header is the unindented `--` lines at the top of the file; the first blank
-line, indented line, code or `--[[` ends it, and directives after that are
-ignored. The plugin reads only `@api_level`, `@input` and `@time_independent`;
-every other directive configures only the simulator. `@MugTypography` must appear
-within the first 5 lines for the simulator to recognise the script.
+Leading Lua comments configure the simulator and host; they are not runtime API. The header is the unindented `--` lines at the top of the file; the first blank line, indented line, code, or `--[[` ends single-line directive parsing, and directives after that are ignored. The plugin reads only `@api_level`, `@input`, and `@time_independent`; every other directive configures only the simulator. `@MugTypography` must appear within the first 5 lines for the simulator to recognise the script.
 
 ```lua
 -- @MugTypography
@@ -621,7 +570,7 @@ within the first 5 lines for the simulator to recognise the script.
 -- @title Falling Letters
 -- @author Mug
 -- @version 1.0
--- @api_level 12
+-- @api_level 13
 -- @input number 1 "Amplitude" default=15.0
 --[[ @description
 Characters fall into place one by one.
@@ -631,119 +580,78 @@ Characters fall into place one by one.
 ]]
 ```
 
-`@api_level` makes unsupported plugin versions reject the script instead of
-failing at runtime.
-
-`-- @time_independent` (no value) declares identical output across time while
-Inspector values are unchanged, letting the host reuse the overlay and skip
-frame-varying notification. It is an author promise, not
-analysis: do not declare it for output depending on `ctx.time`, `ctx.frame`,
-timeline information, call counts or external state. Inspector changes (including
-animated `@input` slots), source edits and render size changes still invalidate
-reuse; other time-varying effects stay active. The simulator parses it but keeps
-evaluating preview frames.
-
-`-- @animation_id FAD002`: ID of a bundled sample only (its genre's three capital letters + a three-digit number),
-shown in the browser and MCP search. Do not write it in your own scripts. Not a runtime API.
+- `@api_level`: makes unsupported plugin versions reject the script cleanly instead of failing at runtime.
+- `-- @time_independent` (no value): declares identical output across time while Inspector values are unchanged, letting the host reuse the overlay and skip frame-varying notification. It is an author promise, not analysis: do not declare it for output depending on `ctx.time`, `ctx.frame`, timeline information, call counts, or external state. Inspector changes (including animated `@input` slots), source edits, and render size changes still invalidate reuse; other time-varying effects stay active. The simulator parses it but keeps evaluating preview frames.
+- `-- @animation_id FAD002`: ID of a bundled sample only (its genre's three capital letters + a three-digit number), shown in the browser and MCP search. Do not write it in your own scripts. Not a runtime API.
 
 Description metadata:
+
 - Default: `--[[ @description\n<text>\n]]`.
 - Translation: `--[[ @description.<locale>\n<text>\n]]`; e.g. `ja`, `en`, `en-US`.
 - Locale tags: case-insensitive; first declaration per locale wins.
 - Display fallback: nonempty exact locale, nonempty base language, default.
 - Search: default and all translations, independent of display locale.
-- Content: one sentence describing visible motion; English <=30 words preferred;
-  no API names or settings lists.
-- Ordering: all single-line metadata before any description block; the first
-  `--[[` ends header-directive parsing.
+- Content: one sentence describing visible motion; English <=30 words preferred; no API names or settings lists.
+- Ordering: all single-line metadata before any description block; the first `--[[` ends header-directive parsing.
 - Host: descriptions are Lua comments, ignored by the plugin; no API-level bump.
 
-`@recommend` sets the simulator's initial scene. Use it **only** when the effect needs
-specific conditions; otherwise do not pin text, position or background, or it
-becomes unclear whether a result came from the script or the preset. Use exactly
-these spellings; colours are `#RRGGBB` or `#RRGGBBAA`:
+`@recommend` sets the simulator's initial scene. Use it **only** when the effect needs specific conditions; otherwise do not pin text, position, or background, or it becomes unclear whether a result came from the script or the preset. Use exactly these spellings; colours are `#RRGGBB` or `#RRGGBBAA`:
 
-- `@recommend bg <spec>`: a colour, or `checkerboard` / `solid`; both may share a
-  line: `bg checkerboard #ffffff`.
+- `@recommend bg <spec>`: a colour, or `checkerboard` / `solid`; both may share a line: `bg checkerboard #ffffff`.
 - `@recommend fill <#hex>`: global fill colour.
-- `@recommend gradient <#hex>`: global gradient **end** colour; the fill colour is
-  the other end.
-- `@recommend pos <X> <Y>`: global position; larger X is right, larger Y is up;
-  center is `0.5 0.5`.
+- `@recommend gradient <#hex>`: global gradient **end** colour; the fill colour is the other end.
+- `@recommend pos <X> <Y>`: global position; larger X is right, larger Y is up; center is `0.5 0.5`.
 - `@recommend text "<string>"`: quoted; `\n` is a newline. `""` starts the scene with no text, for a full-screen effect that draws without body text.
-- `@recommend vertical <boolean>`: initial writing direction on load; not
-  enforced during evaluation.
-- `@recommend lang <code>`: picks a font for that language, e.g. `ja`; inferred
-  from `text` when omitted.
+- `@recommend vertical <boolean>`: initial writing direction on load; not enforced during evaluation.
+- `@recommend lang <code>`: picks a font for that language, e.g. `ja`; inferred from `text` when omitted.
 
-`@input` exposes a user-editable, keyframeable Inspector parameter, read from the
-matching `ctx.inputs` array. Use it for coefficients, colors or text the user
-should control; do not declare unused slots.
+`@input` exposes a user-editable, keyframeable Inspector parameter, read from the matching `ctx.inputs` array. Use it for coefficients, colors, booleans, or text the user should control; do not declare unused slots.
 
 `@input <type> <index> "<label>" [default=<value>]`
 
-- `number`: index=1..14; finite default=-1000000..1000000; omitted=0.0
-- `color`: index=1..4; default={r,g,b,a}, channels=0..1; omitted={1,1,1,1}
-- `text`: index=1..4; quoted single-line NUL-free UTF-8 default<=4096 bytes; omitted=""
-- `boolean`: index=1..8; default=true or false; omitted=false
+- `number`: index=1..14 (`ctx.inputs.numbers[index]`); finite default=-1000000..1000000; omitted=0.0
+- `color`: index=1..8 (`ctx.inputs.colors[index]`); default={r,g,b,a}, channels=0..1; omitted={1,1,1,1}
+- `text`: index=1..4 (`ctx.inputs.texts[index]`); quoted single-line NUL-free UTF-8 default<=4096 bytes; omitted=""
+- `boolean`: index=1..8 (`ctx.inputs.booleans[index]`); default=true or false; omitted=false
 - label: quoted UTF-8, 1..64 bytes
 - label/text escapes: `\"` and `\\` only
 - each type/index pair: at most once
 - Inspector visibility: declared slots only
-- fixed read-only arrays: numbers=14, colors=4, texts=4, booleans=8; indexes are 1-based
+- fixed read-only arrays: numbers=14, colors=8, texts=4, booleans=8; indexes are 1-based
 
 ## 9. Execution environment and compatibility
 
-- Available: `math`, `string`, `table`, `utf8`, safe base functions.
-- Unavailable: `os`, `io`, `package`, `require`, `dofile`, `loadfile`, `load`,
-  `debug`, `collectgarbage`, `rawget`, `rawset`, `getmetatable`, `setmetatable`.
-  No file, network or process access.
-- Limits: 5,000,000 instructions per callback invocation; 128 MiB memory.
-  Exceeding either aborts the frame.
-- `print(...)` writes to the simulator Output panel; in the plugin it goes only to
-  the plugin log, which users do not see.
-- Errors that raise: writing a non-writable field, adding an unknown field, type
-  mismatch, replacing or resizing `ctx.chars` / `ctx.parts`, assigning an invalid
-  string to an enumerated field.
+- Available standard libraries: `math`, `string`, `table`, `utf8`, safe base functions.
+- Unavailable: `os`, `io`, `package`, `require`, `dofile`, `loadfile`, `load`, `debug`, `collectgarbage`, `rawget`, `rawset`, `getmetatable`, `setmetatable`. No file, network, or process access.
+- Resource limits: 5,000,000 instructions per callback invocation; 128 MiB memory. Exceeding either aborts the frame.
+- `print(...)`: writes to the simulator Output panel; in the plugin it goes only to the plugin log, which users do not see.
+- Operations that raise an error: writing a non-writable field or outside its `W:` phase, adding an unknown field, type mismatch, replacing or resizing `ctx.chars` / `ctx.parts`, assigning an invalid string to an enumerated field, or passing non-finite numbers (`NaN` / `inf`) to shape cameras or `z_index`.
 
 ### Runtime debugging with print
 
-1. Do not add `print(...)` in normal generation or static fixes (syntax, API
-   usage, units, Inspector overrides), and do not request simulator logs then.
-2. Only for runtime-dependent issues (unexpected curves, timing glitches, boundary
-   states), insert temporary `print(...)` calls for the suspect values.
-3. Then ask the user to mark the range on the timeline if needed, click the Frame
-   Dump button (bug icon), and share the log. It contains a
-   `=== SIMULATOR CONTEXT ===` header (canvas size, FPS, text, global Inspector
-   settings, Script Inputs, character topology) followed by `=== FRAME LOGS ===`.
+1. Do not add `print(...)` in normal generation or static fixes (syntax, API usage, units, Inspector overrides), and do not request simulator logs then.
+2. Only for runtime-dependent issues (unexpected curves, timing glitches, boundary states), insert temporary `print(...)` calls for the suspect values.
+3. Then ask the user to mark the range on the timeline if needed, click the Frame Dump button (bug icon), and share the log. It contains a `=== SIMULATOR CONTEXT ===` header (canvas size, FPS, text, global Inspector settings, Script Inputs, character topology) followed by `=== FRAME LOGS ===`.
 4. Remove all diagnostic `print(...)` calls from the final script.
 
 ### Compatibility
 
-**"Needs API N (this build: M)"** means the script declares a level the installed
-plugin does not implement, so it never runs. The script is not buggy; the plugin
-is older than this reference. Do not lower `@api_level`: that only removes the
-guard, and the script then fails on whichever newer API it uses. The user picks:
+**"Needs API N (this build: M)"** means the script declares a level the installed plugin does not implement, so it never runs. The script is not buggy; the plugin is older than this reference. Do not lower `@api_level`: that only removes the guard, and the script then fails on whichever newer API it uses. The user picks:
 
 - Update the plugin to this reference's target level.
-- Rewrite for the older plugin using **that** plugin's reference: ask the user to
-  attach the `lua_api_for_ai.md` bundled with the installed version. This
-  document cannot tell which of its entries a later version added.
+- Rewrite for the older plugin using **that** plugin's reference: ask the user to attach the `lua_api_for_ai.md` bundled with the installed version. This document cannot tell which of its entries a later version added.
 
-The online simulator always serves the current reference, so users on older
-plugins hit this when copying scripts from it. Compare the target level above
-with the reported `this build:` number.
+The online simulator always serves the current reference, so users on older plugins hit this when copying scripts from it. Compare the target level above with the reported `this build:` number.
 
 ## 10. Complete example
 
-Preserves Inspector transforms and uses fixed-duration transitions. The number
-input is a canvas-height displacement ratio.
+Preserves Inspector transforms and uses fixed-duration transitions. The number input is a canvas-height displacement ratio.
 
 ```lua
 -- @MugTypography
 -- @title Staggered Drop
 -- @version 1.0
--- @api_level 12
+-- @api_level 13
 -- @input number 1 "Travel" default=0.15
 --[[ @description
 Letters drop into place and leave downward with staggered timing.
@@ -763,92 +671,41 @@ end
 
 ## 11. Motion design and animation principles
 
-Start from the user's requested mood, restraint, readability needs and genre
-conventions. Principles are tools for that intent, not effects every script must
-show. A raw mathematical mapping often feels flat, but linear, uniform or minimal
-motion is correct when the concept is mechanical, synchronized, restrained or
-informational. Build only the complexity
-the concept needs.
+Start from the user's requested mood, restraint, readability needs, and genre conventions. Principles are tools for that intent, not effects every script must show. A raw mathematical mapping often feels flat, but linear, uniform, or minimal motion is correct when the concept is mechanical, synchronized, restrained, or informational. Build only the complexity the concept needs.
 
-1. **Interpret intent through metaphor.** Translate the prompt into a physical or
-   visual concept (elastic impact, zero-gravity float, optical slit-scan,
-   mechanical unfolding) and let every parameter serve it.
-2. **Select supporting principles** from timing, anticipation, follow-through,
-   staging, squash and stretch, and overlapping action:
-   - **Weight and inertia:** purposeful acceleration or deceleration for physical
-     motion; anticipation and settling when the material calls for it.
-   - **Elasticity and mass:** proportional deformation and deliberate pivots only
-     for materials that bend, compress or rebound.
-   - **Overlapping action:** stagger characters, parts or secondary properties
-     for organic subjects; keep them synchronized for rigidity, machinery,
-     ceremony or clarity.
-3. **Look beyond 2D translation.** Before settling on offset and rotation, check
-   the axes easiest to overlook:
-   - **Depth.** `ctx.chars[i].z`, `ctx.parts[i].z` and `ctx.camera` place text in
-     space; the camera moves independently.
-   - **Sub-character structure.** `ctx.parts` reaches a glyph's solid components
-     (holes stay with their solid), so characters can split, assemble or move at
-     two scales.
-   - **The letterform.** `ctx.glyphs:declare` replaces a glyph outline with
-     geometry built by `mt.svg_path` / `mt.drawing_path`.
-   - **Trajectory as data.** `mt.path.*` places and orients characters along an
-     arbitrary path.
-   - **Decoration glyphs.** Emphasis lines, rising hearts, anger marks or sweat
-     are custom glyphs placed around the measured text (see Custom glyphs).
-     Design each shape from the concept with `mt.svg_path` or `mt.drawing_path`;
-     a sampled math curve works as well as SVG. Each one uses a character slot,
-     so many particles need the Scripting preset.
-   - **Optical properties.** `ctx.global.shadow.distance`, `ctx.global.shadow.angle`,
-     `ctx.global.shadow.color` and `ctx.global.gradient.angle` are animatable;
-     OKLab-family utilities couple color to motion without uneven brightness.
+1. Interpret intent through metaphor: translate the prompt into a physical or visual concept (elastic impact, zero-gravity float, optical slit-scan, mechanical unfolding) and let every parameter serve it.
+2. Select supporting principles from timing, anticipation, follow-through, staging, squash and stretch, and overlapping action:
+   - Weight and inertia: purposeful acceleration or deceleration for physical motion; anticipation and settling when the material calls for it.
+   - Elasticity and mass: proportional deformation (`stretch_x` / `stretch_y` with inverse volume conservation, or `mt.bounce_ground` / `mt.impact_squash`) and deliberate edge/baseline pivots (`mt.layout.pivot_at_2d`) only for materials that bend, compress, or rebound.
+   - Overlapping action: stagger characters, parts, or secondary properties (`mt.stagger_progress`, `mt.stagger_pattern`) for organic subjects; keep them synchronized for rigidity, machinery, ceremony, or clarity.
+3. Leverage Mug Typography's built-in engines instead of re-implementing math from scratch:
+   - Ballistic landing, wall collisions, and squash-and-stretch: `mt.bounce_ground(ctx, item, groundY, config)` and `mt.bounce_wall(ctx, item, wallX, config)` automatically compute and apply `offset_y` / `offset_x`, `stretch_x`, and `stretch_y` against a canvas or relative line (`align_to = "bottom" | "bounds_bottom" | "baseline" | "center"`). For raw 1D/2D trajectories or collision impulses, use `mt.bounce_y`, `mt.bounce_x`, `mt.impact_squash`, `mt.projectile_2d`, `mt.friction_decay`, and `mt.spring`.
+   - Continuous procedural motion and noise: `mt.wiggle`, `mt.noise1`, `mt.noise2`, `mt.wave`, `mt.wave_triangle`, `mt.wave_square`, `mt.wave_sawtooth`, `mt.cycle`, `mt.pingpong`, and deterministic per-index randomness `mt.random` / `mt.random_range` / `mt.distributed_random` seeded with `ctx.meta.instance_seed`.
+   - Multi-line, character-type, and pose-synchronized layouts: `mt.layout.group_by_line(ctx)` groups characters into lines (or vertical columns); `mt.text.classify(character.text)` distinguishes Japanese scripts (`"kanji"`, `"hiragana"`, `"katakana"`), `"latin"`, `"digit"`, `"punctuation"`, and `"space"` (e.g. scaling kana or punctuation differently followed by `mt.layout.reflow(ctx)`); `mt.layout.match_pose(ctx, destination, source, options)` locks ruby, annotations, or shadow copies to a source character's full 2D/3D pose hierarchy.
+   - Motion along curves and constant-speed paths: `mt.path.arc_length(points, ctx.canvas.aspect_ratio, options)` builds an arc-length parameterized spline (`path:at_distance(ratio)` returns `x, y, headingDegrees`); `mt.layout.queue_on_path(ctx, path, options)` distributes characters or parts along the curve spaced by their natural advances.
+   - Sub-character part disassembly and vertex morphing: `mt.each_part(ctx, options)` animates strokes/radicals/dakuten independently in `OnLayout`; `ctx.paths` + `part.path:map_points(function(x, y, point) ... end)` warps anchor and control points in `OnPath` while preserving contour topology.
+   - Standalone shapes, backgrounds, and jointed rigs: `ctx.shapes:declare({ path, layer, parent, camera })` builds screen-wide frames, particle fields, and hierarchical parent-child character rigs without using character slots or being disturbed by `ctx.global`; `ctx.shape_cameras:declare()` adds independent 3D cameras for shapes.
+   - Custom inline/fitted vector glyphs: `ctx.glyphs:declare` with `mt.svg_path` / `mt.drawing_path` creates custom symbols, underlines, badges, and reaction marks that follow `ctx.global` rotation and scale.
+   - Optical, focus, and neon effects: `ctx.global.blur` / `character.blur` (`amount_x`, `amount_y`, `glow`) for rack-focus, directional motion smear, and self-luminous glow; `ctx.global.shadow` / `character.shadow` (`distance`, `angle`, `blur_x`, `blur_y`, `glow`, `color`) for neon haloes; `ctx.global.gradient` and `mt.color.lerp_oklab` / `lerp_oklch` / `from_okhsl` for perceptual color choreography.
 
-Read the relevant section or entry before using any of these. Finally, confirm
-the script still conveys the concept without breaking the user's constraints or
-adding motion with no clear role.
+Read the relevant section or entry before using any of these. Finally, confirm the script still conveys the concept without breaking the user's constraints or adding motion with no clear role.
 
 ## 12. Checklist before returning a script
 
-The field tables and contract sections define the values; verify the script's
-use of them:
+The field tables and contract sections define the values; verify the script's use of them:
 
-1. Frame independence: all values derive from current inputs; no `x = x + 1`
-   style accumulation; shared locals are overwritten each frame before use
-   (Callbacks).
-2. Access: each write is allowed by the field's `W:` phases (writing `ctx.global`
-   in `OnLayout` raises an error); counts and collections are available in that
-   callback; indexes are 1-based (Callbacks).
-3. Units and reference points: offsets are composed as `offset + delta`, never
-   reset to a bare `0.0`; no `geometry` canvas coordinate is assigned to a pivot;
-   em lengths such as `shadow.distance` stay near font-size scale; pre/post-global
-   spaces match (Coordinates and transforms).
-4. Direction: angles are clockwise-positive (`shadow.angle = 90` is down);
-   vectors from an angle use `mt.polar_offset_2d` (Coordinates and transforms).
-5. Placement: measured positions go through `place_2d` / `pivot_at_2d`; pivots
-   change only to change a rotation/scale reference; per-character
-   `scale` / `stretch_*` changes are followed by `mt.layout.reflow` when spacing
-   must follow; custom-glyph decorations declare zero-area `bounds`, sit on a line of
-   their own, are placed by measurement and are ordered in front or behind on purpose
-   (Coordinates and transforms; Paths, text and drawing order).
-6. Inspector composition: unrelated settings are preserved; direct assignments are
-   intentional replacements; each individual style is paired with `use = true`
-   and keeps effective inherited components for partial changes (Inspector
-   composition and style inheritance).
-7. Timing: fixed-duration transitions use `mt.timeline.intro_outro_seconds` or
-   `mt.timeline.remaining`; clip-proportional timing is intentional (Time and
-   transitions).
-8. API calls: defaults, enums, table shapes and argument units come from the full
-   entries; `ctx.paths`, `ctx.glyphs` and `path` methods use colons; no deprecated
-   APIs (Reference lookup; Paths, text and drawing order).
-9. Rendering policy: 3D is disabled only when explicitly required; textures are
-   added only when the request or material requires them (Essential contract).
-10. Color: OKLab for blending, OKLCH for hue travel, OKHSL rather than OKHSV for
-    lightness changes (Colors, gradients and textures).
-11. Delivery: complete new scripts declare the target API level; input declarations
-    match used slots; diagnostic prints are removed (Script metadata header;
-    Execution environment and compatibility).
-12. Creative intent: requested restraint and readability are respected; each
-    secondary motion or optical change serves the requested effect (Motion design
-    and animation principles).
+1. Frame independence: all values derive from current inputs; no `x = x + 1` style accumulation; shared locals are overwritten each frame before use (Callbacks).
+2. Access: each write is allowed by the field's `W:` phases (writing `ctx.global` or `ctx.camera` in `OnLayout` raises an error); counts and collections are read only in `OnLayout` / `OnPath`; indexes are 1-based (Callbacks).
+3. Units and reference points: offsets and pivots are composed around `0.5` (`offset + delta`), never reset to a bare `0.0`; no `geometry` canvas coordinate is assigned to a pivot; em lengths such as `shadow.distance` and `blur.amount_*` stay near font-size scale; pre/post-global spaces match (Coordinates and transforms).
+4. Direction: 2D angles are clockwise-positive (`shadow.angle = 90` is down); vectors from an angle use `mt.polar_offset_2d`; drawing paths and bounding-box fill/stroke Y offsets are Y-down while placement is Y-up (Coordinates and transforms; Paths, text and drawing order).
+5. Placement: measured post-global positions (`measure_bounds_2d`, `get_canvas_position_2d`) go through `place_2d` / `canvas_to_offset_2d` / `pivot_at_2d`; pivots change only to change a rotation/scale reference; per-character `scale` / `stretch_*` changes are followed by `mt.layout.reflow` when spacing must follow; custom-glyph decorations declare zero-area `bounds`, sit on a line of their own, are placed by measurement, and are ordered in front or behind on purpose, whereas standalone backgrounds/frames use `ctx.shapes` (Coordinates and transforms; Paths, text and drawing order).
+6. Inspector composition: unrelated settings are preserved; direct assignments are intentional replacements; each individual style (`fill`, `stroke`, `shadow`, `texture`, `blur`) is paired with `use = true` in the same callback and keeps effective inherited components via `mt.<group>.resolve` for partial changes (Inspector composition and style inheritance).
+7. Timing: fixed-duration transitions use `mt.timeline.intro_outro_seconds` or `mt.timeline.remaining`; clip-proportional timing is intentional; random ordering/stagger is seeded with `ctx.meta.instance_seed` (Time and transitions).
+8. API calls: defaults, enums, table shapes, and argument units come from the full entries; `ctx.paths`, `ctx.glyphs`, `ctx.shapes`, `ctx.shape_cameras`, and `path` methods use colons (`:`); no deprecated APIs (Reference lookup; Paths, text and drawing order).
+9. Rendering policy: 3D is disabled (`ctx.output.force_disable_3d_projection = true`) only when explicitly required; textures are added only when the request or material requires them (Essential contract).
+10. Color: OKLab (`lerp_oklab`) for blending, OKLCH (`lerp_oklch`, `from_oklch`) for hue travel, OKHSL (`from_okhsl`) rather than OKHSV for lightness changes (Colors, gradients and textures).
+11. Delivery: complete new scripts declare `-- @api_level 13`; `@input` declarations match used `ctx.inputs` slots; diagnostic `print(...)` calls are removed (Script metadata header; Execution environment and compatibility).
+12. Creative intent: requested restraint and readability are respected; built-in physics, layout, path, part, shape, and optical helpers are used where appropriate; each secondary motion or optical change serves the requested effect (Motion design and animation principles).
 
 State assumptions that affect the result and any required facts that remain unknown.
 
@@ -874,6 +731,8 @@ ctx.text : string [R:pre,layout read-only]
  Deprecated and scheduled for removal. Use ctx.global.text to read or rewrite the current text. DEPRECATED.
 ctx.char_count : integer [R:layout,path read-only]
  Number of active characters after layout generation.
+ctx.shape_count : integer [R:layout,path read-only]
+ Number of shapes declared for this frame; ctx.char_count counts the text only.
 ctx.part_count : integer [R:layout,path read-only]
  Number of active parts after layout generation.
 ctx.canvas : MtCanvas [R:all read-only]
@@ -900,6 +759,10 @@ ctx.paths : MtPathCollection [R:path read-only]
  Lazy selector for normalized drawing paths available in OnPath.
 ctx.glyphs : MtGlyphDeclarations [R:pre read-only]
  Custom glyph declarations accepted before shaping and layout.
+ctx.shapes : MtShapes [R:pre,layout,path read-only]
+ Shapes laid out apart from the text: declare them in OnPreLayout, then read them by one-based shape number in OnLayout and OnPath.
+ctx.shape_cameras : MtShapeCameras [R:pre,layout read-only]
+ Cameras that view shapes, apart from the text's camera: declare them in OnPreLayout, then read and write them by one-based camera number in OnLayout.
 ctx.bounding_box : MtBoundingBox [R:layout,path read-only]
  Writable bounding-box drawing parameters.
 ctx.output : MtOutput [R:layout,path read-only]
@@ -994,19 +857,21 @@ ctx.meta.limits.max_characters : integer [R:all read-only]
  Maximum number of characters this instance can lay out and expose to scripts.
 ctx.meta.limits.max_parts : integer [R:all read-only]
  Maximum number of parts this instance can lay out and expose to scripts.
+ctx.meta.limits.max_shapes : integer [R:all read-only]
+ Maximum number of shapes this instance can lay out and expose to scripts; shapes use no character or part slots.
 ```
 
-### script_inputs
+### ctx.inputs
 
 ```text
-script_inputs.numbers : number[] [R:all read-only]
+ctx.inputs.numbers : number[] [R:all read-only]
  unit=unitless
  Length 14; 1-based.
-script_inputs.colors : MtColor[] [R:all read-only]
+ctx.inputs.colors : MtColor[] [R:all read-only]
+ Length 8; 1-based.
+ctx.inputs.texts : string[] [R:all read-only]
  Length 4; 1-based.
-script_inputs.texts : string[] [R:all read-only]
- Length 4; 1-based.
-script_inputs.booleans : boolean[] [R:all read-only]
+ctx.inputs.booleans : boolean[] [R:all read-only]
  Length 8; 1-based.
 ```
 
@@ -1158,6 +1023,9 @@ ctx.global.shadow.blur_x : number [R:pre,layout,path W:pre]
 ctx.global.shadow.blur_y : number [R:pre,layout,path W:pre]
  unit=em  neutral=0  range=0..10  base=font size (1.0 = 1 em)
  Global shadow vertical blur, as a Gaussian sigma in em (1.0 = one font size).
+ctx.global.shadow.glow : number [R:pre,layout,path W:pre]
+ unit=unitless  neutral=0  range=0..10
+ Global shadow glow strength. It brightens the blurred shadow into a glow and has no effect while the shadow is not blurred (0 = no glow).
 ctx.global.shadow.color : MtColor [R:pre,layout,path W:pre]
  Resolved global shadow color.
 ```
@@ -1198,7 +1066,7 @@ ctx.camera.pitch : number [R:pre,layout,path W:pre]
  unit=degrees  neutral=0  axis=camera_orbit  base=+ orbits the camera UP (looking down at the subject)
  Camera orbit pitch in degrees.
 ctx.camera.perspective : number [R:pre,layout,path W:pre]
- unit=perspective_strength  base=distancePx = f(perspective) * canvas.height; larger = camera closer
+ unit=perspective_strength  range=0..1  base=distancePx = f(perspective) * canvas.height; larger = camera closer
  Perspective strength.
 ctx.camera.zoom : number [R:pre,layout,path W:pre]
  unit=multiplier  neutral=1  range=0.001..+inf
@@ -1262,6 +1130,9 @@ ctx.chars[i].pitch : number [R:layout,path W:layout]
 ctx.chars[i].opacity : number [R:layout,path W:layout]
  unit=unit_interval  neutral=1
  Character opacity multiplier in the range 0 to 1 applied to the resolved fill, gradient, stroke, and shadow.
+ctx.chars[i].z_index : number [R:layout,path W:layout]
+ unit=unitless  neutral=0
+ Paint order key of a shape within its layer (shapes only; a text character ignores it): a higher value is drawn later, in front of the lower ones, and equal values keep declaration order. It never moves a shape across the text.
 ctx.chars[i].fill : MtIndividualFill [R:layout,path W:layout]
  Individual fill color override.
 ctx.chars[i].stroke : MtIndividualStroke [R:layout,path W:layout]
@@ -1316,6 +1187,9 @@ ctx.chars[i].shadow / ctx.parts[i].shadow.blur_x : number [R:layout,path W:layou
 ctx.chars[i].shadow / ctx.parts[i].shadow.blur_y : number [R:layout,path W:layout]
  unit=em  neutral=0  range=0..10  base=font size (1.0 = 1 em)
  Individual shadow vertical blur in em; it follows the same use flag as the shadow color. Script-only, so it reads as the frame's shadow blur until a script sets it.
+ctx.chars[i].shadow / ctx.parts[i].shadow.glow : number [R:layout,path W:layout]
+ unit=unitless  neutral=0  range=0..10
+ Individual shadow glow strength; it follows the same use flag as the shadow color. Script-only, so it reads as the frame's shadow glow until a script sets it. No effect while the shadow is not blurred.
 ```
 
 ### ctx.parts[i]
@@ -1485,14 +1359,14 @@ ctx.bounding_box.fill_offset_x : number [R:layout,path W:layout]
  unit=font_size_percent  base=100.0 = one font size, horizontal
  Horizontal fill offset.
 ctx.bounding_box.fill_offset_y : number [R:layout,path W:layout]
- unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
- Vertical fill offset.
+ unit=font_size_percent  axis=y_down  base=100.0 = one font size, vertical
+ Vertical fill offset; positive moves downward.
 ctx.bounding_box.stroke_offset_x : number [R:layout,path W:layout]
  unit=font_size_percent  base=100.0 = one font size, horizontal
  Horizontal stroke offset.
 ctx.bounding_box.stroke_offset_y : number [R:layout,path W:layout]
- unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
- Vertical stroke offset.
+ unit=font_size_percent  axis=y_down  base=100.0 = one font size, vertical
+ Vertical stroke offset; positive moves downward.
 ```
 
 ### ctx.output
@@ -1543,25 +1417,25 @@ part.path : MtDrawingPath [R:path read-only]
  Mutable path initialized from the original glyph part and committed atomically after OnPath succeeds.
 ```
 
-### each_info
+### info
 
 ```text
-each_info.progress : number [R:layout,path read-only]
+info.progress : number [R:layout,path read-only]
  unit=unit_interval
  Normalized position within the filtered set, following the order option.
-each_info.n : integer [R:layout,path read-only]
+info.n : integer [R:layout,path read-only]
  One-based counter within the filtered set. Differs from the yielded index whenever a filter is active.
-each_info.count : integer [R:layout,path read-only]
+info.count : integer [R:layout,path read-only]
  Number of elements in the filtered set (at least 1).
-each_info.first : boolean [R:layout,path read-only]
+info.first : boolean [R:layout,path read-only]
  True on the first iteration of the filtered set.
-each_info.last : boolean [R:layout,path read-only]
+info.last : boolean [R:layout,path read-only]
  True on the last iteration of the filtered set.
-each_info.char : MtCharacter [R:layout,path read-only]
+info.char : MtCharacter [R:layout,path read-only]
  mt.each_part only: the character owning this part.
-each_info.char_index : integer [R:layout,path read-only]
+info.char_index : integer [R:layout,path read-only]
  mt.each_part only: one-based index of the owning character in ctx.chars.
-each_info.index_in_char : integer [R:layout,path read-only]
+info.index_in_char : integer [R:layout,path read-only]
  mt.each_part only: one-based part index within the owning character.
 ```
 
@@ -1575,6 +1449,8 @@ ctx.paths:part(index) -> MtPathPart|nil [R:path read-only]
  Lazily get one part by its one-based global part index, or nil when absent.
 ctx.paths:character(index) -> MtPathPart[] [R:path read-only]
  Lazily get every part owned by one one-based character index.
+ctx.paths:shape(number) -> MtPathPart[] [R:path read-only]
+ Lazily get the part of one shape by its one-based shape number; the array is empty when no such shape exists.
 ctx.paths:select(selector) -> MtPathPart[] [R:path read-only]
  Lazily select parts with the character/part selector grammar, ordered by global part index.
 ```
@@ -1604,41 +1480,149 @@ MtDrawingPath:map_points(callback) -> nil [R:all read-only]
  Atomically replace every anchor and control point with coordinates returned by a callback while preserving path topology.
 ```
 
-### path_point
+### point
 
 ```text
-path_point.index : integer [R:all read-only]
+point.index : integer [R:all read-only]
  One-based point index across the path.
-path_point.command_index : integer [R:all read-only]
+point.command_index : integer [R:all read-only]
  One-based logical command index.
-path_point.contour_index : integer [R:all read-only]
+point.contour_index : integer [R:all read-only]
  One-based contour index.
-path_point.role : string [R:all read-only]
+point.role : string [R:all read-only]
  values=anchor|control1|control2
  Point role within the logical command.
-path_point.command : string [R:all read-only]
+point.command : string [R:all read-only]
  values=move|line|quad|cubic
  Logical command containing this point.
 ```
 
-### glyph_declarations
+### ctx.glyphs
 
 ```text
-glyph_declarations:declare(declaration) -> string [R:pre read-only]
+ctx.glyphs:declare(declaration) -> string [R:pre read-only]
  Declare one custom glyph and return its placeholder; path uses Y-down drawing coordinates, while bounds and advances use Y-up layout coordinates.
 ```
 
-### blur
+### ctx.shapes
 
 ```text
-blur.use : boolean [R:layout,path W:layout]
+ctx.shapes:declare(declaration) -> integer [R:pre read-only]
+ Declare one shape and return its one-based number; path uses Y-down drawing coordinates in normalized em units around the shape position, and layer is "back" (default) or "front", parent is the number of an earlier shape to place this one relative to, and camera is the number of a camera from ctx.shape_cameras:declare that projects this shape in 3D (a child takes its parent's camera, naming a different one is an error, and a child of a shape with no camera cannot name one; none leaves the shape fixed to the canvas).
+```
+
+### ctx.shapes[i]
+
+```text
+ctx.shapes[i].index : integer [R:layout,path read-only]
+ One-based shape number: the one ctx.shapes[number] and ctx.shapes:declare return.
+ctx.shapes[i].parent : integer [R:layout,path read-only]
+ One-based number of the shape this one is placed relative to, as given to ctx.shapes:declare; 0 when it has no parent.
+ctx.shapes[i].camera : integer [R:layout,path read-only]
+ One-based number of the shape camera that projects this shape, as given to ctx.shapes:declare or taken from its parent; 0 when it has none and stays fixed to the canvas.
+ctx.shapes[i].offset_x : number [R:layout,path W:layout]
+ unit=canvas_ratio_displacement  neutral=0.5  base=canvas width
+ Shape X offset; 0.5 is no displacement.
+ctx.shapes[i].offset_y : number [R:layout,path W:layout]
+ unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height
+ Shape Y offset; 0.5 is no displacement and values grow upward.
+ctx.shapes[i].pivot_x : number [R:layout,path W:layout]
+ unit=canvas_ratio_displacement  neutral=0.5  base=canvas width, measured from the shape position
+ Pivot X displacement from the shape position, in canvas-normalized units; 0.5 means zero displacement.
+ctx.shapes[i].pivot_y : number [R:layout,path W:layout]
+ unit=canvas_ratio_displacement  neutral=0.5  axis=y_up  base=canvas height, measured from the shape position
+ Pivot Y displacement from the shape position, in canvas-normalized units; 0.5 means zero displacement and values grow upward.
+ctx.shapes[i].scale : number [R:layout,path W:layout]
+ unit=multiplier  neutral=1  range=0.001..+inf
+ Uniform scale across the shape's plane (x and y); it does not scale depth, so a rotated child under a scaled parent shears.
+ctx.shapes[i].stretch_x : number [R:layout,path W:layout]
+ unit=multiplier  neutral=1  base=horizontal
+ Horizontal shape stretch.
+ctx.shapes[i].stretch_y : number [R:layout,path W:layout]
+ unit=multiplier  neutral=1  base=vertical
+ Vertical shape stretch.
+ctx.shapes[i].rotation : number [R:layout,path W:layout]
+ unit=degrees  neutral=0  axis=clockwise_positive
+ Shape rotation in degrees. Positive turns clockwise: 90 makes what pointed up point right.
+ctx.shapes[i].z : number [R:layout,path W:layout]
+ unit=canvas_ratio_length  neutral=0  axis=z_into_screen  base=positive = deeper/away from camera
+ Z position along the view direction, in the parent's space; positive is farther from the camera. Acts only on a shape that has a shape camera.
+ctx.shapes[i].yaw : number [R:layout,path W:layout]
+ unit=degrees  neutral=0  axis=object_yaw  base=+ turns the right edge toward the viewer (-Z)
+ Yaw in degrees, applied after pitch and before the in-plane rotation. Acts only on a shape that has a shape camera.
+ctx.shapes[i].pitch : number [R:layout,path W:layout]
+ unit=degrees  neutral=0  axis=object_pitch  base=+ turns the top edge toward the viewer (-Z)
+ Pitch in degrees, applied before yaw and the in-plane rotation. Acts only on a shape that has a shape camera.
+ctx.shapes[i].opacity : number [R:layout,path W:layout]
+ unit=unit_interval  neutral=1
+ Shape opacity multiplier in the range 0 to 1 applied to the resolved fill, gradient, stroke, and shadow.
+ctx.shapes[i].z_index : number [R:layout,path W:layout]
+ unit=unitless  neutral=0
+ Paint order key within the shape's layer: a higher value is drawn later, in front of the lower ones, and equal values keep declaration order. It never moves a shape across the text.
+ctx.shapes[i].fill : MtIndividualFill [R:layout,path W:layout]
+ Individual fill color override.
+ctx.shapes[i].stroke : MtIndividualStroke [R:layout,path W:layout]
+ Individual stroke override.
+ctx.shapes[i].shadow : MtIndividualShadow [R:layout,path W:layout]
+ Individual shadow color and blur override.
+ctx.shapes[i].texture : MtTexture [R:layout,path W:layout]
+ Individual texture override; script-only (no host parameter group backs it), so it always reads as unused/default unless a script sets it.
+ctx.shapes[i].blur : MtBlur [R:layout,path W:layout]
+ Individual blur of the text itself (fill, gradient, texture, stroke, crayon); script-only (no host parameter group backs it), so it always reads as unused/default unless a script sets it.
+ctx.shapes[i].path : MtDrawingPath [R:layout read-only]
+ The shape outline in normalized em units around the shape position. It starts as the declared path and is edited in place, for example with path:assign.
+```
+
+### ctx.shape_cameras
+
+```text
+ctx.shape_cameras:declare() -> integer [R:pre read-only]
+ Declare one camera for shapes and return its one-based number. A camera starts at the default values of the text's camera and is moved by writing ctx.shape_cameras[number] in OnLayout; a shape names it with ctx.shapes:declare({ camera = number }).
+```
+
+### ctx.shape_cameras[i]
+
+```text
+ctx.shape_cameras[i].target_x : number [R:layout W:layout]
+ unit=canvas_ratio_position  base=canvas width (0.5 = center)
+ Camera target X in host-normalized coordinates.
+ctx.shape_cameras[i].target_y : number [R:layout W:layout]
+ unit=canvas_ratio_position  axis=y_up  base=canvas height (0.5 = center)
+ Camera target Y in host-normalized coordinates; values grow upward.
+ctx.shape_cameras[i].yaw : number [R:layout W:layout]
+ unit=degrees  neutral=0  axis=camera_orbit  base=+ orbits the camera to the RIGHT of the target (subject appears to turn left)
+ Camera orbit yaw in degrees.
+ctx.shape_cameras[i].pitch : number [R:layout W:layout]
+ unit=degrees  neutral=0  axis=camera_orbit  base=+ orbits the camera UP (looking down at the subject)
+ Camera orbit pitch in degrees.
+ctx.shape_cameras[i].perspective : number [R:layout W:layout]
+ unit=perspective_strength  range=0..1  base=distancePx = f(perspective) * canvas.height; larger = camera closer
+ Perspective strength.
+ctx.shape_cameras[i].zoom : number [R:layout W:layout]
+ unit=multiplier  neutral=1  range=0.001..+inf
+ Camera zoom multiplier.
+ctx.shape_cameras[i].lens_shift_x : number [R:layout W:layout]
+ unit=canvas_ratio_length  neutral=0  base=canvas width
+ Horizontal lens shift as a canvas fraction.
+ctx.shape_cameras[i].lens_shift_y : number [R:layout W:layout]
+ unit=canvas_ratio_length  neutral=0  axis=y_up  base=canvas height
+ Vertical lens shift as a canvas fraction; values grow upward.
+```
+
+### ctx.global.blur / ctx.chars[i].blur / ctx.parts[i].blur
+
+```text
+ctx.global.blur / ctx.chars[i].blur / ctx.parts[i].blur.use : boolean [R:layout,path W:layout]
  Whether this element's own blur is used instead of the inherited one. Ignored on ctx.global.
-blur.amount_x : number [R:pre,layout,path W:pre,layout]
+ctx.global.blur / ctx.chars[i].blur / ctx.parts[i].blur.amount_x : number [R:pre,layout,path W:pre,layout]
  unit=em  neutral=0  range=0..10  base=font size (1.0 = 1 em)
  Horizontal blur of the text, as a Gaussian sigma in em (1.0 = one font size). 0 leaves the horizontal edges sharp.
-blur.amount_y : number [R:pre,layout,path W:pre,layout]
+ctx.global.blur / ctx.chars[i].blur / ctx.parts[i].blur.amount_y : number [R:pre,layout,path W:pre,layout]
  unit=em  neutral=0  range=0..10  base=font size (1.0 = 1 em)
  Vertical blur of the text, as a Gaussian sigma in em (1.0 = one font size). 0 leaves the vertical edges sharp.
+ctx.global.blur / ctx.chars[i].blur / ctx.parts[i].blur.glow : number [R:pre,layout,path W:pre,layout]
+ unit=unitless  neutral=0  range=0..10
+ Glow strength of the blurred text: it brightens the blur into a glow and has no effect while the text is not blurred (0 = no glow).
 ```
 
 ### ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture
@@ -1715,6 +1699,8 @@ mt.timeline : MtTimelineUtilities
  Timeline progress and interpolation namespace.
 mt.text : MtTextUtilities
  UTF-8 safe text processing namespace.
+mt.target : MtTargetUtilities
+ Character and part selection-string namespace.
 mt.CHAR : integer
  Character kind flag for target and order entries; combine it with a one-based character index.
 mt.PART : integer
@@ -1842,14 +1828,14 @@ mt.color.lerp_okhsl(from, to, t) -> MtColor
 
 ```text
 mt.shadow.resolve(ctx, target, options?) -> MtResolvedShadow
- Resolve the shadow (color, blur_x and blur_y in em) of a character or part. With no options this is the final shadow it is drawn with; options.level stops the inheritance at an earlier tier. shadow.use switches color and blur together, so to override one of them read the tier above and write the other back.
+ Resolve the shadow (color, blur_x, blur_y in em, and glow) of a character or part. With no options this is the final shadow it is drawn with; options.level stops the inheritance at an earlier tier. shadow.use switches color, blur and glow together, so to override one of them read the tier above and write the other back.
 ```
 
 ### mt.blur.*
 
 ```text
 mt.blur.resolve(ctx, target, options?) -> MtResolvedBlur
- Resolve the blur of the text itself (amount_x and amount_y in em) of a character or part. With no options this is the final blur; options.level stops the inheritance at an earlier tier.
+ Resolve the blur of the text itself (amount_x and amount_y in em, and glow) of a character or part. With no options this is the final blur; options.level stops the inheritance at an earlier tier.
 ```
 
 ### mt.stroke.*
@@ -1935,13 +1921,13 @@ mt.ease.cubic_bezier(x1, y1, x2, y2, t) -> number
 mt.layout.reflow(ctx, gap?, config?) -> void
  Reflows characters from exact horizontal or vertical typesetting origins while preserving shaped spacing and applying current scale/stretch; skipped targets contribute advances without being moved.
 mt.layout.place_2d(ctx, item, canvasX, canvasY) -> number, number
- Places a character or part anchor at an exact pre-3D canvas point through the complete global/character/part 2D hierarchy.
+ Places a character, part or shape anchor at an exact pre-3D canvas point through the complete global/character/part 2D hierarchy (a shape sits outside the Global).
 mt.layout.get_canvas_position_2d(ctx, item) -> number, number
- Calculates the exact current pre-3D canvas position (canvasX, canvasY) of a character or part anchor.
+ Calculates the exact current pre-3D canvas position (canvasX, canvasY) of a character, part or shape anchor.
 mt.layout.radial_distance(ctx, canvasX, canvasY, centerX?, centerY?) -> number
  Aspect-corrected distance from a canvas point to the centre of a radial effect.
 mt.layout.canvas_to_offset_2d(ctx, item, canvasX, canvasY) -> number, number
- Calculates the relative offset_x and offset_y required to place a character or part anchor at an exact pre-3D canvas position (canvasX, canvasY) without mutating item properties.
+ Calculates the relative offset_x and offset_y required to place a character, part or shape anchor at an exact pre-3D canvas position (canvasX, canvasY) without mutating item properties.
 mt.layout.measure_bounds_2d(ctx, targets?, targetType?, space?) -> table|nil
  Returns axis-aligned bounds of transformed natural part boxes after the complete 2D hierarchy and before 3D, projection, and deformation. Omit targets to measure every character or part. space=before_global_rotation measures in Canvas coordinates with Global rotation removed around its position-plus-pivot; all other transforms remain.
 mt.layout.queue_on_path(ctx, path, options?) -> number[]
@@ -2003,6 +1989,15 @@ mt.timeline.intro_outro(progress, introFraction, outroFraction) -> number, numbe
  Deprecated: fraction-based transitions stretch with the clip length; use intro_outro_seconds. DEPRECATED.
 ```
 
+### mt.target.*
+
+```text
+mt.target.chars(ctx, specification, options?) -> integer[]
+ Resolve a character/part selection string (the grammar of the host's character and part target settings: c3, p2, 5, 2-4, !c1) to ascending character numbers; a bare number is a character, and a character is listed when any of its parts is selected. options.empty is 'none' (default) or 'all' for a string that selects nothing.
+mt.target.parts(ctx, specification, options?) -> integer[]
+ Resolve a character/part selection string (the grammar of the host's character and part target settings: c3, p2, 5, 2-4, !c1) to ascending global part numbers; a bare number is a part. options.empty is 'none' (default) or 'all' for a string that selects nothing.
+```
+
 ### mt.text.*
 
 ```text
@@ -2039,6 +2034,7 @@ start from Index by Purpose when you only know the goal. Do not read end to end.
 - Motion paths : `mt.path.bezier` / `mt.path.catmull_rom` / `mt.path.arc_length`
 - Path creation and editing : `mt.svg_path` / `path:*`
 - UTF-8 text processing : `mt.text.slice` / `mt.text.classify`
+- Character and part selection strings : `mt.target.chars` / `mt.target.parts`
 - Clip time : `mt.timeline.progress` / `mt.timeline.duration` / `mt.timeline.remaining` / `mt.timeline.intro_outro_seconds` / `mt.timeline.window_progress` / `mt.timeline.window_ctx` / `mt.timeline.chain`
 
 ### 1. Value Constraints and Range Mapping
@@ -2176,7 +2172,7 @@ Each key’s `v` must be either a number or a color table of the form `{ r, g, b
 If `time` is before the first key, the first value is returned; if it is after the last key, the last value is returned (clamping).
 
 RET
-- `number \ color` -- Same as the key values
+- `number | color` Same as the key values -- Value interpolated within the interval
 
 ```lua
 -- Fall with a bounce from 0.0 to 0.3 seconds, remain still from 0.3 to 0.5 seconds,
@@ -2663,7 +2659,7 @@ character.offset_y = 0.5 + settle * 0.1
 Converts a polar direction (degrees) and radius into a Y-up canvas offset pair (radial scatter, orbital motion, circular explosion). It lets you express motion such as scattering, gathering, and orbiting without writing `cos` / `sin`.
 
 ARGS
-- `angleDegrees` (`number` degree) Direction. As with [coordinates](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-coordinates), 0 degrees points right and positive values rotate clockwise
+- `angleDegrees` (`number` degree) Direction. As with coordinates, 0 degrees points right and positive values rotate clockwise
 - `radius` (`number` canvas normalized displacement) Distance in that direction
 
 RET
@@ -3015,7 +3011,7 @@ character.offset_x = 0.5 - 0.5 + travelled
 
 ### 9. Color
 
-See [“color” in Concepts](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-color) for the color format.
+See “color” in Concepts for the color format.
 RGBA is the color storage format. When calculating colors, select the color space that matches the intent.
 
 #### `mt.color.resolve_fill(ctx, target, options?)`
@@ -3023,12 +3019,12 @@ RGBA is the color storage format. When calculating colors, select the color spac
 Resolves the fill applied to a character or part and returns its base color,
 fill mode, and object opacity. It is available in `OnLayout` and `OnPath`.
 With no `options` it returns the final fill the target is drawn with; `options.level`
-stops the inheritance at an earlier tier (see [Style inheritance](#style-inheritance)).
+stops the inheritance at an earlier tier (see Style inheritance).
 
 ARGS
 - `ctx` (`table`) Current OnLayout or OnPath context
-- `target` (`character \ part`) Required
-- `options` (`table` default `nil`) (`12+`) `{ level = "global" \
+- `target` (`character | part`) An element of `ctx.chars` or `ctx.parts`
+- `options` (`table` default `nil`) (`12+`) `{ level = "global" | "character" | "part" }`
 
 ##### Return Values
 
@@ -3129,16 +3125,16 @@ does not affect the original settings.
 Arguments of every resolve function:
 
 - `ctx` : `table` : Required : Current OnLayout or OnPath context
-- `target` : `character \ : part` : Required : An element of `ctx.chars` or `ctx.parts`
-- `options` : `table` : `nil` : `{ level = "global" \ : "character" \ : "part" }`
+- `target` : `character | part` : Required : An element of `ctx.chars` or `ctx.parts`
+- `options` : `table` : `nil` : `{ level = "global" | "character" | "part" }`
 
 #### `mt.shadow.resolve(ctx, target, options?)`
 
-Resolves the shadow. Returns `{ color, blur_x, blur_y }`: the shadow color and the horizontal and vertical blur in em.
+Resolves the shadow. Returns `{ color, blur_x, blur_y, glow }`: the shadow color, the horizontal and vertical blur in em, and the glow strength.
 
 #### `mt.blur.resolve(ctx, target, options?)`
 
-Resolves the blur of the text itself. Returns `{ amount_x, amount_y }` in em.
+Resolves the blur of the text itself. Returns `{ amount_x, amount_y, glow }`: the blur in em and the glow strength.
 
 #### `mt.stroke.resolve(ctx, target, options?)`
 
@@ -3296,10 +3292,11 @@ Precisely places the anchor of a character or part at a canvas normalized positi
 
 - Character anchor: natural ink bounds center `geometry.bounds_center_x/y`
 - Part anchor: part-local natural center (the local origin of the rendered path)
+- Shape anchor: the shape's position, the origin of its path (the canvas center until it is offset). Only the shape's own `offset` / `pivot` / `rotation` / `scale` / `stretch` count, because the Global does not reach a shape
 
 ARGS
 - `ctx` (`table`) `OnLayout` context
-- `item` (`table`) Target character or part
+- `item` (`table`) Target character, part or shape
 - `canvasX` / `canvasY` (`number` canvas normalized position) Destination coordinates
 
 RET (multiple values)
@@ -3480,7 +3477,7 @@ These bounds are **before 3D, camera, projection, and Deform are applied**. They
 
 ARGS
 - `ctx` (`table`) `OnLayout` context
-- `targets` (`table \ nil`) All
+- `targets` (`table | nil` default All) Array of 1-based character or part indices. `nil` selects every target of the requested type
 - `targetType` (`string` default `"character"`) Target type: `"character"` or `"part"`
 - `space` (`string` default `"canvas"`) `"canvas"` or `"before_global_rotation"`
 
@@ -3602,7 +3599,7 @@ These curve-evaluation APIs represent motion along control points, such as “fl
 The coordinate system is not fixed. Points are plain `{ x, y }` tables. The functions accept whichever coordinate system the caller passes, such as normalized offset coordinates, canvas pixels, or character-local coordinates, and return values in the same coordinate system.
 
 > [!NOTE]
-> **When assigning returned values directly to `offset_x` / `offset_y`, specify the points in offset units as well (the [canvas normalized displacement](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/01_concepts#section-units) whose neutral value is `0.5`).** In the example below, the landing point is `{ x = 0.5, y = 0.5 }` (zero displacement), so `character.offset_x = x` lands directly at the natural position. If absolute canvas coordinates or zero-based local coordinates are assigned to offset unchanged, the character will move to an unintended position.
+> **When assigning returned values directly to `offset_x` / `offset_y`, specify the points in offset units as well (the canvas normalized displacement whose neutral value is `0.5`).** In the example below, the landing point is `{ x = 0.5, y = 0.5 }` (zero displacement), so `character.offset_x = x` lands directly at the natural position. If absolute canvas coordinates or zero-based local coordinates are assigned to offset unchanged, the character will move to an unintended position.
 
 Every function returns four values: `x, y, tangentX, tangentY`. `tangentX` / `tangentY` are raw, unnormalized derivatives that also include travel speed. To obtain the direction angle, use `math.deg(math.atan(tangentY, tangentX))`; to obtain a unit vector, divide by `local length = math.sqrt(tangentX^2 + tangentY^2)`.
 
@@ -3781,16 +3778,16 @@ diamond:close()
 
 The `path` of a part obtained through `ctx.paths` can be edited with the following methods.
 
-- [`path:clear()`](#api-path-clear) : Delete every command in the path
-- [`path:assign(template)`](#api-path-assign) : Replace with a template created by `mt.svg_path`
-- [`path:set_svg(source)`](#api-path-set-svg) : Parse SVG path data and replace the path
-- [`path:move_to(x, y)`](#api-path-move-to) : Add the starting point of a subpath
-- [`path:line_to(x, y)`](#api-path-line-to) : Add a line
-- [`path:quad_to(cx, cy, x, y)`](#api-path-quad-to) : Add a quadratic Bézier curve
-- [`path:cubic_to(cx1, cy1, cx2, cy2, x, y)`](#api-path-cubic-to) : Add a cubic Bézier curve
-- [`path:close()`](#api-path-close) : Close the current subpath
-- [`path:bounds()`](#api-path-bounds) : Get tight bounds including curve extrema
-- [`path:map_points(callback)`](#api-path-map-points) : Transform every point without changing topology
+- `path:clear()` : Delete every command in the path
+- `path:assign(template)` : Replace with a template created by `mt.svg_path`
+- `path:set_svg(source)` : Parse SVG path data and replace the path
+- `path:move_to(x, y)` : Add the starting point of a subpath
+- `path:line_to(x, y)` : Add a line
+- `path:quad_to(cx, cy, x, y)` : Add a quadratic Bézier curve
+- `path:cubic_to(cx1, cy1, cx2, cy2, x, y)` : Add a cubic Bézier curve
+- `path:close()` : Close the current subpath
+- `path:bounds()` : Get tight bounds including curve extrema
+- `path:map_points(callback)` : Transform every point without changing topology
 
 ##### Coordinate System
 
@@ -3980,7 +3977,57 @@ end
 
 This is lightweight classification based on the first code point, not language detection across the entire grapheme cluster. Empty strings, emoji, combining marks, and anything else outside the defined ranges are classified as `"other"`.
 
-### 19. Clip Time
+### 19. Character and Part Selection
+
+#### `mt.target.chars(ctx, specification, options?)`
+
+Resolves a selection string to character numbers. The string uses the same grammar as the character and part target settings of the host, so a script can offer the same notation as an input.
+
+- Tokens are separated by commas or whitespace.
+- `c3` is character 3, `p2` is global part 2, and a bare number is a character in this function.
+- `a-b` is an inclusive range. `c1-c3`, `p2-p5` and `2-4` are all valid. A bare end takes the kind of the other end, a reversed range is swapped, and a range whose ends have different kinds is ignored.
+- A leading `!` excludes. An exclusion wins over every include, whatever the order.
+- Numbers outside the text, malformed tokens and `0` are ignored.
+
+A character is listed when at least one of its parts is selected, so `p5` lists the character that owns part 5.
+
+ARGS
+- `ctx` (`table`) `OnLayout` or `OnPath` context
+- `specification` (`string`) Selection string
+- `options` (`table` default `nil`) `{ empty = "none" | "all" }`. What a string that selects nothing resolves to. `"none"` (default) selects nothing and `"all"` selects every character. Exclusions still apply to `"all"`
+
+RET
+- `integer[]` -- Ascending character numbers (the `ctx.chars` indices), ready for `ipairs`
+
+```lua
+function OnLayout(ctx)
+    for _, characterNumber in ipairs(mt.target.chars(ctx, "1-3, 6, !c2")) do
+        ctx.chars[characterNumber].scale = 1.2
+    end
+end
+```
+
+#### `mt.target.parts(ctx, specification, options?)`
+
+Resolves a selection string to global part numbers. The grammar is the one described for `mt.target.chars`, except that a bare number is a part. A character selector such as `c3` selects all of that character's parts.
+
+ARGS
+- `ctx` (`table`) `OnLayout` or `OnPath` context
+- `specification` (`string`) Selection string
+- `options` (`table` default `nil`) `{ empty = "none" | "all" }`. What a string that selects nothing resolves to. `"none"` (default) selects nothing and `"all"` selects every part. Exclusions still apply to `"all"`
+
+RET
+- `integer[]` -- Ascending global part numbers (the `ctx.parts` indices), ready for `ipairs`
+
+```lua
+function OnLayout(ctx)
+    for _, partNumber in ipairs(mt.target.parts(ctx, "c1 p9")) do
+        ctx.parts[partNumber].opacity = 0.5
+    end
+end
+```
+
+### 20. Clip Time
 
 #### `mt.timeline.progress(ctx, fallbackDuration?)`
 
@@ -4023,7 +4070,7 @@ local clipDuration =
 
 #### `mt.timeline.remaining(ctx, fallbackDuration?)`
 
-Returns the actual number of seconds remaining until the end of the clip. This is a basic building block for writing an outro (exit animation) in real time anchored to the endpoint (see the design rules for [`ctx.timeline`](https://mug-lab-3.github.io/mug-typography-docs/en/scripting/02_ctx_reference#section-timeline)).
+Returns the actual number of seconds remaining until the end of the clip. This is a basic building block for writing an outro (exit animation) in real time anchored to the endpoint (see the design rules for `ctx.timeline`).
 
 ARGS
 - `ctx` (`table`) Context
