@@ -540,7 +540,7 @@ A space's `geometry.bounds_*` is its font cell: its own advance along the flow a
 
 ### `ctx.global.margins`
 
-A 1-based dense array indexed like `ctx.chars`. `margins[i]` is added in em, together with `tracking`, to the advance **after** character `i`. Non-integer or string keys, holes, and non-number elements raise an error. Any length is allowed: missing entries add nothing, and entries past the last character are unused.
+A 1-based array indexed like `ctx.chars`. `margins[i]` is added in em, together with `tracking`, to the advance **after** character `i`. In `OnPreLayout` it has `ctx.meta.limits.max_characters` entries, so `#ctx.global.margins` is not the character count. Unset indices add nothing, so `margins[2] = 0.5` alone is valid, and indices above `max_characters` are ignored. Non-integer, string, zero, or negative keys and non-number values raise an error.
 
 `utf8.len(ctx.global.text)` may differ from the shaped character count (combining marks, ligatures, grapheme clusters); do exact-count work in `OnLayout`.
 
@@ -898,7 +898,7 @@ ctx.global.v_align : string [R:pre,layout,path W:pre]
  Vertical alignment.
 ctx.global.margins : number[] [R:pre,layout,path W:pre]
  unit=em  base=font size (1.0 = 1 em)
- Per-character margins.
+ Per-character margins. Unset indices add nothing; in OnPreLayout it has ctx.meta.limits.max_characters entries.
 ctx.global.emoji : MtGlobalEmoji [R:pre,layout,path W:pre]
  Emoji placement and font settings. Changing any value rebuilds the layout, so avoid animating them every frame.
 ctx.global.position_x : number [R:pre,layout,path W:pre]
