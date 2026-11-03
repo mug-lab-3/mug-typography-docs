@@ -1,4 +1,4 @@
-Target API level: **13**. Lua 5.4 for the Mug Typography plugin.
+Target API level: **14**. Lua 5.4 for the Mug Typography plugin.
 
 ## 0. Reference lookup
 
@@ -34,7 +34,7 @@ Default generation policy (explicit effect requirements may override it):
 1. Compose animation over Inspector values: add deltas to position, offset, pivot, rotation, and depth (`z`); multiply scale, stretch, and opacity by factors. Copy originals before multiple writes that need the same baseline. Replace only what the effect drives; when enabling a feature, configure its related parameters, since inactive fields need not hold the effective inherited style.
 2. Keep fixed-duration transitions in seconds (`mt.timeline.intro_outro_seconds`, `mt.timeline.remaining`); use clip fractions only for intentionally clip-proportional timing.
 3. Preserve 3D projection. Set `ctx.output.force_disable_3d_projection` only for an explicit 2D-only request or an effect that requires 2D output; it overrides all Inspector and keyframed 3D values. Neutral 3D values or 2D-only motion are not reasons; leaving it `false` lets the user add 3D in the Inspector later.
-4. Omit deprecated APIs. Declare the target API level (`-- @api_level 13`) in complete new scripts. Add material effects (`texture.type`) only when requested or required by the named material.
+4. Omit deprecated APIs. Declare the target API level (`-- @api_level 14`) in complete new scripts. Add material effects (`texture.type`) only when requested or required by the named material.
 
 ```lua
 -- RIGHT: motion derived from ctx.time, composed over the current settings
@@ -386,8 +386,11 @@ A texture states what the letters are made of. **Choose one only when the user a
 - `stained_glass`: `p1` = piece size (relative to untransformed character), `p2` = lead width (`0` removes lead), `p3` = hue range (spreads from the fill colour underneath), `p4` = glow (`0.0`–`1.0`: `0.5` is plain glass, above `0.5` emits light, **below `0.5` darkens toward `0`**). `texture.color` is **the lead colour**.
 - `metallic`: `p1` = polish (`0` matte, `1` mirror), `p2` = relief, `p3` = reflection contrast, `p4` = light angle (degrees). Takes the metal colour from the **fill** and uses `texture.color` as the light colour.
 - `metallic_2`: `p1` = polish (`0` matte, `1` mirror), `p2` = relief, `p3` = exposure (`0.5` is neutral studio brightness), `p4` = light angle (degrees). Takes the metal colour from the **fill** and uses `texture.color` as the light colour.
+- `stripe`: `p1` = stripe count across the part's longer side (2 to 24), `p2` = stripe width as the share of each period (0.1 to 0.9), `p3` = strength (`0` leaves the fill, `1` paints the stripe colour in full), `p4` = angle the stripes run (degrees; `0` along the part's x axis). `texture.color` is **the stripe colour**. The pattern is centred on the part and travels with it, so each part carries its own stripes.
+- `colored_pencil`: a solid pencil fill with the paper showing through it as thin tapered scratches, plus a clean narrow bare band just inside the edges that face the light. The fill is the pencil colour and `texture.color` is the paper, so the scratches are white by default. `p1` = scratch density (`0` draws no scratches, `0.5` is 62 rows across the part's longer side and `1` is 240), `p2` = scratch length (`0` half the usual, `1` twice it), `p3` = light amount (`0` ignores the light; more widens the bare band along the lit edges and shows more paper on the lit side), `p4` = stroke angle (degrees; `0` along the part's x axis), `p5` = light angle (degrees, the direction the light comes from on screen: `0` right, `90` bottom, `180` left, `270` top; API level 14). The scratches are scattered at random and stay put frame to frame.
+- `halftone` and `halftone_diamond`: round and diamond dots on one grid. `p1` = dot count across the part's longer side (4 to 40), `p2` = dot size (`0` removes the dots; a diamond is drawn with the circle's area, and neighbours merge at `0.6`), `p3` = fade (`0` keeps every dot the same size, `1` shrinks them to nothing at the far end of the fade direction), `p4` = grid angle (degrees; `45` turns round dots into the diamond lattice and diamonds into upright squares), `p5` = fade angle (degrees; `0` thickens the dots downwards and each quarter turn carries that on clockwise, independent of `p4`; API level 14). `texture.color` is **the dot colour**. The grid is centred on the part and travels with it.
 
-Slot values `p1`–`p3` (and `stained_glass` `p4`) are `0.0`–`1.0` (clamped when drawn); light angles in `p4` are in degrees and wrap around (which is why the field reference marks `p1`–`p4` as `unitless`). Unless noted above, `texture.color` tints the light added on top of the fill (white leaves it untinted). On a character, part, or shape, set `texture.use = true` or the inherited texture stays.
+Slot values `p1`–`p3` (and `stained_glass` `p4`) are `0.0`–`1.0` (clamped when drawn); angles in `p4` and `p5` are in degrees and wrap around (which is why the field reference marks `p1`–`p5` as `unitless`). Unless noted above, `texture.color` tints the light added on top of the fill (white leaves it untinted). On a character, part, or shape, set `texture.use = true` or the inherited texture stays.
 
 ## 7. Paths, text and drawing order
 
@@ -570,7 +573,7 @@ Leading Lua comments configure the simulator and host; they are not runtime API.
 -- @title Falling Letters
 -- @author Mug
 -- @version 1.0
--- @api_level 13
+-- @api_level 14
 -- @input number 1 "Amplitude" default=15.0
 --[[ @description
 Characters fall into place one by one.
@@ -651,7 +654,7 @@ Preserves Inspector transforms and uses fixed-duration transitions. The number i
 -- @MugTypography
 -- @title Staggered Drop
 -- @version 1.0
--- @api_level 13
+-- @api_level 14
 -- @input number 1 "Travel" default=0.15
 --[[ @description
 Letters drop into place and leave downward with staggered timing.
@@ -704,7 +707,7 @@ The field tables and contract sections define the values; verify the script's us
 8. API calls: defaults, enums, table shapes, and argument units come from the full entries; `ctx.paths`, `ctx.glyphs`, `ctx.shapes`, `ctx.shape_cameras`, and `path` methods use colons (`:`); no deprecated APIs (Reference lookup; Paths, text and drawing order).
 9. Rendering policy: 3D is disabled (`ctx.output.force_disable_3d_projection = true`) only when explicitly required; textures are added only when the request or material requires them (Essential contract).
 10. Color: OKLab (`lerp_oklab`) for blending, OKLCH (`lerp_oklch`, `from_oklch`) for hue travel, OKHSL (`from_okhsl`) rather than OKHSV for lightness changes (Colors, gradients and textures).
-11. Delivery: complete new scripts declare `-- @api_level 13`; `@input` declarations match used `ctx.inputs` slots; diagnostic `print(...)` calls are removed (Script metadata header; Execution environment and compatibility).
+11. Delivery: complete new scripts declare `-- @api_level 14`; `@input` declarations match used `ctx.inputs` slots; diagnostic `print(...)` calls are removed (Script metadata header; Execution environment and compatibility).
 12. Creative intent: requested restraint and readability are respected; built-in physics, layout, path, part, shape, and optical helpers are used where appropriate; each secondary motion or optical change serves the requested effect (Motion design and animation principles).
 
 State assumptions that affect the result and any required facts that remain unknown.
@@ -1631,22 +1634,25 @@ ctx.global.blur / ctx.chars[i].blur / ctx.parts[i].blur.glow : number [R:pre,lay
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.use : boolean [R:layout,path W:layout]
  Whether this element's own texture is used instead of the inherited one. Ignored on ctx.global.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.type : string [R:pre,layout,path W:pre,layout]
- values=none|water_droplet|air_cushion|glitter|iridescent|faceted|stained_glass|metallic|metallic_2
+ values=none|water_droplet|air_cushion|glitter|iridescent|faceted|stained_glass|metallic|metallic_2|stripe|colored_pencil|halftone|halftone_diamond
  Fill material; none paints the plain fill.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p1 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- First shared material control; 0..1 for every type. Its meaning follows texture.type (water_droplet thickness, air_cushion inflation, glitter flake size where 0 removes the flakes, iridescent film thickness, faceted facet count, stained_glass piece size relative to the untransformed character, metallic and metallic_2 polish where 0 is matte and 1 is a mirror). Out-of-range values are clamped when drawn; the stored value is unchanged.
+ First shared material control; 0..1 for every type. Its meaning follows texture.type (water_droplet thickness, air_cushion inflation, glitter flake size where 0 removes the flakes, iridescent film thickness, faceted facet count, stained_glass piece size relative to the untransformed character, metallic and metallic_2 polish where 0 is matte and 1 is a mirror, stripe count from 2 to 24 across the part's longer side, halftone and halftone_diamond dot count from 4 to 40 across it, colored_pencil scratch density where 0 draws no scratches, 0.5 is 62 rows of them across the part's longer side and 1 is 240). Out-of-range values are clamped when drawn; the stored value is unchanged.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p2 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- Second shared material control; 0..1 for every type (water_droplet roundness, air_cushion seal width, glitter highlight ratio, iridescent hue range, faceted bevel depth, stained_glass lead width; 0 removes the lead; metallic and metallic_2 relief).
+ Second shared material control; 0..1 for every type (water_droplet roundness, air_cushion seal width, glitter highlight ratio, iridescent hue range, faceted bevel depth, stained_glass lead width; 0 removes the lead; metallic and metallic_2 relief, stripe width as the share of each period the stripe fills, from 0.1 to 0.9, halftone and halftone_diamond dot size, as a circle's radius share of its cell from 0 for no dots to 0.6 where neighbours merge; a diamond is drawn with the same area, colored_pencil scratch length where 0 is half the usual length and 1 is twice it).
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p3 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- Third shared material control; 0..1 for every type (water_droplet gloss, air_cushion wrinkles, glitter flake amount, iridescent strength, faceted polish, stained_glass hue range, metallic reflection contrast, metallic_2 exposure where 0.5 is the neutral studio). Glitter flake amount is 0 for no flakes and 1 for full density; its hue spread is fixed at full range around texture.color. Stained glass hue range spreads from the fill underneath.
+ Third shared material control; 0..1 for every type (water_droplet gloss, air_cushion wrinkles, glitter flake amount, iridescent strength, faceted polish, stained_glass hue range, metallic reflection contrast, metallic_2 exposure where 0.5 is the neutral studio, stripe strength where 0 leaves the fill and 1 paints the stripe colour in full, halftone and halftone_diamond fade where 0 keeps every dot the same size and 1 shrinks the dots to nothing at the far end of the fade direction set by p5, colored_pencil light amount, the width of the bare band along the edges facing the light and how much more of the paper shows on the lit side, where 0 ignores the light). Glitter flake amount is 0 for no flakes and 1 for full density; its hue spread is fixed at full range around texture.color. Stained glass hue range spreads from the fill underneath.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p4 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- Fourth shared material control. Light angles (water_droplet, air_cushion, glitter, iridescent, faceted, metallic, metallic_2) are degrees and wrap; stained_glass glow is 0..1 whose midpoint 0.5 is plain glass, above it the panes emit and below it they darken.
+ Fourth shared material control. Light angles (water_droplet, air_cushion, glitter, iridescent, faceted, metallic, metallic_2) are degrees and wrap; stained_glass glow is 0..1 whose midpoint 0.5 is plain glass, above it the panes emit and below it they darken. Stripe angle is the direction the stripes run in degrees, wrapping; 0 runs along the x axis and 90 along the y axis of the part. Halftone and halftone_diamond grid angle turns the grid of dots by the same rule; 45 gives the diamond lattice of round dots and upright squares of diamonds. Colored pencil stroke angle turns the scratches by the same rule.
+ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p5 : number [R:pre,layout,path W:pre,layout]
+ unit=unitless
+ Fifth shared material control, read only by halftone, halftone_diamond and colored_pencil. For halftone and halftone_diamond it is the fade angle in degrees: 0 thickens the dots downwards and each quarter turn carries the direction clockwise on screen, independent of the grid angle in p4. For colored_pencil it is the light angle in degrees, the direction the light comes from on screen: 0 is the right, 90 the bottom, 180 the left and 270 the top, and the edges facing it are left bare. Defaults to 0; other types ignore it.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.color : MtColor [R:pre,layout,path W:pre,layout]
- Tints the light the material adds on top of the fill; white leaves it untinted. Glitter uses it as the metal colour and stained_glass as the lead colour; iridescent ignores it. Metallic and metallic_2 use it as the light colour and take the metal colour from the fill.
+ Tints the light the material adds on top of the fill; white leaves it untinted. Glitter uses it as the metal colour and stained_glass as the lead colour; iridescent ignores it. Metallic and metallic_2 use it as the light colour and take the metal colour from the fill. Stripe, halftone and halftone_diamond paint their stripes and dots in this colour; white is the default. Colored pencil uses it as the paper that shows through the fill, so the scratches take this colour and white is the default.
 ```
 
 ### color value
@@ -1849,7 +1855,7 @@ mt.stroke.resolve(ctx, target, options?) -> MtResolvedStroke
 
 ```text
 mt.texture.resolve(ctx, target, options?) -> MtResolvedTexture
- Resolve the texture (type, p1 to p4 and color) of a character or part. With no options this is the final texture; options.level stops the inheritance at an earlier tier.
+ Resolve the texture (type, p1 to p5 and color) of a character or part. With no options this is the final texture; options.level stops the inheritance at an earlier tier.
 ```
 
 ### mt.ease.*
