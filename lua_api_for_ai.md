@@ -1,4 +1,4 @@
-Target API level: **14**. Lua 5.4 for the Mug Typography plugin.
+Target API level: **15**. Lua 5.4 for the Mug Typography plugin.
 
 ## 0. Reference lookup
 
@@ -25,7 +25,7 @@ Runtime requirements:
 1. Compute each frame from current inputs alone. `ctx` is rebuilt from Inspector values every frame, and frames may be evaluated out of order, so cross-frame accumulation (`x = x + 1`) is invalid. File-scope locals may only pass freshly recomputed values between callbacks within the same frame.
 2. Write each field only in its `W:` phase: `OnPreLayout` for `ctx.global`, `ctx.camera`, `ctx.glyphs:declare`, and `ctx.shapes:declare` / `ctx.shape_cameras:declare`; `OnLayout` for `ctx.chars[i]`, `ctx.parts[i]`, `ctx.shapes[i]` (including its `path`), `ctx.shape_cameras[i]`, `ctx.bounding_box`, and `ctx.output`; `OnPath` for `part.path` obtained from `ctx.paths`. Writing outside a `W:` phase raises an error. Counts (`ctx.char_count`, `ctx.part_count`, `ctx.shape_count`) exist only after layout (`OnLayout` / `OnPath`); array indexes start at 1. New scripts omit legacy `OnInitialize`.
 3. Keep positions, displacements, and lengths distinct. `offset_*` and `pivot_*` have zero displacement at `0.5`, so `0.0` is a displacement of `-0.5` (half a canvas down/left), not the origin; canvas positions (`ctx.global.position_x` / `position_y`, `ctx.camera.target_x` / `target_y`) have their center at `0.5`. Shadow distance and blur lengths use em (`1.0` = one font size); bounding-box lengths use font-size percent (`100.0` = one font size).
-4. Placement coordinates are Y-up; drawing paths (`MtDrawingPath`) and bounding-box fill/stroke Y offsets are Y-down. 2D angles are clockwise-positive (`shadow.angle = 90` points down); negate angles taken from the counterclockwise math convention, and build vectors from an angle with `mt.polar_offset_2d`. Measured post-global coordinates (`mt.layout.measure_bounds_2d`, `mt.layout.get_canvas_position_2d`) go through `mt.layout.place_2d` / `mt.layout.canvas_to_offset_2d` / `mt.layout.pivot_at_2d`, never directly into pre-global `offset_*`.
+4. Placement coordinates and offsets are Y-up; drawing paths (`MtDrawingPath`) are Y-down. 2D angles are clockwise-positive (`shadow.angle = 90` points down); negate angles taken from the counterclockwise math convention, and build vectors from an angle with `mt.polar_offset_2d`. Convert equally scaled Y-up vectors to rotation with `mt.direction_to_rotation_2d(dx, dy)`; for width/height normalized deltas use `mt.direction_to_rotation_2d(dx, dy, ctx.canvas.aspect_ratio)`. Measured post-global coordinates (`mt.layout.measure_bounds_2d`, `mt.layout.get_canvas_position_2d`) go through `mt.layout.place_2d` / `mt.layout.canvas_to_offset_2d` / `mt.layout.pivot_at_2d`, never directly into pre-global `offset_*`.
 5. A style's `use` selects an override, not visibility. Set `use = true` in the same callback when supplying an individual `fill`, `stroke`, `shadow`, `texture`, or `blur`, and preserve inherited components via `mt.<group>.resolve` for partial changes. Subobject table assignments merge fields; omitted fields remain unchanged.
 6. A callback error aborts the current frame and skips later callbacks. Earlier writes are not guaranteed to be rolled back, but the incomplete frame is never rendered.
 
@@ -34,7 +34,7 @@ Default generation policy (explicit effect requirements may override it):
 1. Compose animation over Inspector values: add deltas to position, offset, pivot, rotation, and depth (`z`); multiply scale, stretch, and opacity by factors. Copy originals before multiple writes that need the same baseline. Replace only what the effect drives; when enabling a feature, configure its related parameters, since inactive fields need not hold the effective inherited style.
 2. Keep fixed-duration transitions in seconds (`mt.timeline.intro_outro_seconds`, `mt.timeline.remaining`); use clip fractions only for intentionally clip-proportional timing.
 3. Preserve 3D projection. Set `ctx.output.force_disable_3d_projection` only for an explicit 2D-only request or an effect that requires 2D output; it overrides all Inspector and keyframed 3D values. Neutral 3D values or 2D-only motion are not reasons; leaving it `false` lets the user add 3D in the Inspector later.
-4. Omit deprecated APIs. Declare the target API level (`-- @api_level 14`) in complete new scripts. Add material effects (`texture.type`) only when requested or required by the named material.
+4. Omit deprecated APIs. Declare the target API level (`-- @api_level 15`) in complete new scripts. Add material effects (`texture.type`) only when requested or required by the named material.
 
 ```lua
 -- RIGHT: motion derived from ctx.time, composed over the current settings
@@ -111,7 +111,7 @@ end
 
 Shapes (`ctx.shapes[i]`) inherit from `ctx.global.*` and override with `shape.<style>.use = true` in `OnLayout`.
 
-Opacity multiplies across tiers without a `use` flag: `global.opacity * character.opacity * part.opacity` (for shapes: `global.opacity * shape.opacity`). Transform fields (`offset_*`, `pivot_*`, `scale`, `stretch_*`, `rotation`, `z`, `yaw`, `pitch`) also have no `use` flag and always compose across tiers.
+Opacity multiplies across tiers without a `use` flag: `global.opacity * character.opacity * part.opacity` (for shapes: `global.opacity * shape.opacity`). Each part is drawn on its own, so where a glyph's contours overlap, translucent text shows the overlap more opaque; set `ctx.global.single_part_glyph = true` for fades that do not move parts individually. Transform fields (`offset_*`, `pivot_*`, `scale`, `stretch_*`, `rotation`, `z`, `yaw`, `pitch`) also have no `use` flag and always compose across tiers.
 
 ### Individual style overrides
 
@@ -178,17 +178,17 @@ Unit vocabulary:
 - `canvas_ratio_displacement`: displacement from a reference point; `neutral=0.5` means zero displacement (`value - 0.5` is the signed displacement fraction of canvas width/height; Y is `axis=y_up`). Fields: `ctx.global.pivot_x` / `pivot_y`, and character/part/shape `offset_*` and `pivot_*`.
 - `canvas_ratio_length`: signed or unsigned distance as a fraction of canvas width or height; `neutral=0.0` (no `0.5` bias). Fields: `ctx.font.em_size` / `ascent` / `descent` / `line_height`, `geometry.bounds_width` / `bounds_height` / `advance_*` / `local_center_*`, character/part/shape `z` (`axis=z_into_screen`, positive is deeper/away from camera), and camera `lens_shift_*`.
 - `em`: `1.0` = one font size (`neutral=0.0`). Fields: `ctx.global.tracking`, `ctx.global.margins`, `ctx.global.emoji.offset_x` / `offset_y`, `stroke.width` / `gap` / `outer_width`, `shadow.distance` / `blur_x` / `blur_y`, and `blur.amount_x` / `amount_y`.
-- `font_size_percent`: `100.0` = one font size (`px = value * fontSizePx / 100`). Fields: `ctx.bounding_box.width` / `margin_*` / `corner_radius` / `fill_offset_*` / `stroke_offset_*`. Note that `margin_y` is `axis=y_up`, whereas `fill_offset_y` and `stroke_offset_y` are in drawing space (`axis=y_down`, positive moves downward).
+- `font_size_percent`: `100.0` = one font size (`px = value * fontSizePx / 100`). Fields: `ctx.bounding_box.width` / `margin_*` / `corner_radius` / `fill_offset_*` / `stroke_offset_*`.
 - `multiplier`: scale factor where `neutral=1.0` leaves size unchanged. Fields: `ctx.global.line_spacing`, `scale`, `stretch_x`, `stretch_y`, `camera.zoom`, `ctx.global.emoji.scale`, `ctx.global.stroke.miter_limit`.
-- `unit_interval`: `0.0`–`1.0` normalized value (`opacity` has `neutral=1.0`; `progress`, `midpoint`, `write_on_start`, `write_on_end`, and `color` channels range `0.0`–`1.0`).
+- `unit_interval`: `0.0`-`1.0` normalized value (`opacity` has `neutral=1.0`; `progress`, `midpoint`, `write_on_start`, `write_on_end`, and `color` channels range `0.0`-`1.0`).
 - `degrees`: angle in degrees (`neutral=0.0`). 2D rotations and angles are `axis=clockwise_positive`.
 - `path_units`: normalized local outline coordinates where `1000` units = `1.0` em (`axis=y_down` for paths: positive X is right, positive Y is down).
 - `font_design_units`: font-native design units (`ctx.font.units_per_em`, conversion factor only).
-- `perspective_strength`: `0.0`–`1.0` camera perspective strength (`distancePx = f(perspective) * canvas.height`; larger = camera closer / stronger perspective).
-- `gradient_position`: ratio along the gradient angle across the transformed text bounding box (`0.0`–`1.0` spans edge to edge).
+- `perspective_strength`: `0.0`-`1.0` camera perspective strength (`distancePx = f(perspective) * canvas.height`; larger = camera closer / stronger perspective).
+- `gradient_position`: ratio along the gradient angle across the transformed text bounding box (`0.0`-`1.0` spans edge to edge).
 - `ratio`: aspect ratio (`ctx.canvas.aspect_ratio = width / height`, `ctx.canvas.pixel_aspect_ratio`).
 - `px`, `seconds`, `frames`, `fps`: literal physical/time units.
-- `unitless`: dimensionless scalar (`ctx.inputs.numbers`, `z_index`, `shadow.glow`, `blur.glow`, `texture.p1`–`p4`).
+- `unitless`: dimensionless scalar (`ctx.inputs.numbers`, `z_index`, `shadow.glow`, `blur.glow`, `texture.p1`-`p4`).
 
 ### Length units
 
@@ -270,7 +270,7 @@ At the character level the natural bounds center is folded into the pivot term. 
 
 ### Measure layout instead of assuming it
 
-Inspector `ctx.global.scale`, `tracking`, `line_spacing`, `h_align` / `v_align`, and `margins` move the glyphs before `OnLayout` runs. Place, align, and space characters from measurements — `mt.layout.measure_bounds_2d`, `geometry.*`, and the canvas-normalized `ctx.font.em_size` / `ascent` / `descent` / `line_height` — and express distances that should follow the glyphs in those terms rather than as fixed canvas fractions. (`ctx.font.units_per_em` is a font design-unit conversion factor, not a canvas distance.)
+Inspector `ctx.global.scale`, `tracking`, `line_spacing`, `h_align` / `v_align`, and `margins` move the glyphs before `OnLayout` runs. Place, align, and space characters from measurements (`mt.layout.measure_bounds_2d`, `geometry.*`, and the canvas-normalized `ctx.font.em_size` / `ascent` / `descent` / `line_height`), and express distances that should follow the glyphs in those terms rather than as fixed canvas fractions. (`ctx.font.units_per_em` is a font design-unit conversion factor, not a canvas distance.)
 
 ### Moving something to a measured position
 
@@ -293,7 +293,7 @@ When measuring text bounds to place a decoration or frame that should rotate tog
 
 ### Angles in detail
 
-- `rotation` (2D, on `global`, `character`, `part`, `shape`): positive is clockwise (`90` turns what pointed up `+Y` to point right `+X`). When computing a heading from Y-up coordinates via `math.deg(math.atan(dy, dx))` (which is counterclockwise-positive), negate the angle before assigning to `rotation`, or use `path:at_distance(ratio)` from `mt.path.arc_length`, which already returns headings in clockwise screen convention.
+- `rotation` (2D, on `global`, `character`, `part`, `shape`): positive is clockwise (`90` turns what pointed up `+Y` to point right `+X`). For a heading from equally scaled Y-up coordinates use `mt.direction_to_rotation_2d(dx, dy)` (for width/height normalized deltas pass `ctx.canvas.aspect_ratio` as the optional third argument), or use `path:at_distance(ratio)` from `mt.path.arc_length`, which already returns headings in clockwise screen convention.
 - `mt.polar_offset_2d(angleDegrees, radius)`: takes a clockwise angle (`0` = right `+X`, `90` = down `-Y`, `-90` = up `+Y`) and returns `dx, dy` in Y-up canvas offset units, ready to add to `offset_x` and `offset_y`.
 - Object `yaw` / `pitch` (`ctx.global`, `ctx.chars[i]`, `ctx.parts[i]`, `ctx.shapes[i]`): rotate the object about its own pivot. Positive `yaw` turns the right edge toward the viewer (`-Z`); positive `pitch` turns the top edge toward the viewer (`-Z`).
 - Camera `yaw` / `pitch` (`ctx.camera`, `ctx.shape_cameras[i]`): orbit the camera around `target_x` / `target_y`. Positive `yaw` moves the camera to the right of the target (so the subject appears to turn left); positive `pitch` moves the camera up (looking down at the subject).
@@ -324,13 +324,13 @@ Timing selection guide:
 
 - Fixed-duration intro and outro: `local intro, outro = mt.timeline.intro_outro_seconds(ctx, introSeconds, outroSeconds, fallbackDuration?)`. Returns `intro` (`0` -> `1` over the first `introSeconds`) and `outro` (`0` -> `1` over the last `outroSeconds`). Requested durations compress proportionally only when `introSeconds + outroSeconds` exceeds the clip duration.
 - Remaining time until clip end: `mt.timeline.remaining(ctx, fallbackDuration?)` returns remaining seconds.
-- Local time window: `mt.timeline.window_progress(ctx, startSeconds, durationSeconds)` returns clamped `0`–`1` linear progress inside `[startSeconds, startSeconds + durationSeconds]`. `mt.timeline.window_ctx(ctx, startSeconds, durationSeconds)` returns a derived `ctx` remapped to that window.
+- Local time window: `mt.timeline.window_progress(ctx, startSeconds, durationSeconds)` returns clamped `0`-`1` linear progress inside `[startSeconds, startSeconds + durationSeconds]`. `mt.timeline.window_ctx(ctx, startSeconds, durationSeconds)` returns a derived `ctx` remapped to that window.
 - Multi-stage sequential choreography: `mt.timeline.chain(ctx, initialValue, segments, options?)` evaluates pure-function stage segments sequentially (each segment receives `(segmentCtx, previousValue)` and can be an active `{ duration = ..., run = function(segCtx, state) ... end }` or a hold `{ hold = "remaining" | seconds }`), passing each completed segment's final return value to the next.
 - Piecewise keyframe curves: `mt.keyframes(keys, time)` interpolates numeric or RGBA color keyframe tables `{ { t = 0.0, v = 0.0, ease = "out_cubic" }, { t = 1.0, v = 1.0 } }`.
 
 ### Filtered and staggered intro/outro
 
-`mt.each_char(ctx, options?)` and `mt.each_part(ctx, options?)` supply filtering (`from`, `to`, `from_char`, `to_char`, `line`), ordering (`order = "asc" | "desc" | "center" | "random"`, `seed`), and a reusable `info` table (`progress`, `n`, `count`, `first`, `last`, plus `char`, `char_index`, `index_in_char` on `mt.each_part`). Note that `info` is reused across iterations — copy fields out if you need to store them. Pass `info.progress` into `mt.stagger_progress(progress, info.progress, span)` (where `span` in `0.0`–`1.0` controls overlap and guarantees every element finishes at `progress == 1.0`). For time-based stagger by index, use `mt.stagger(time, index, delay, duration)` or `mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?)`. Seed random ordering or random stagger with `ctx.meta.instance_seed` so multiple clip instances do not repeat the identical random pattern:
+`mt.each_char(ctx, options?)` and `mt.each_part(ctx, options?)` supply filtering (`from`, `to`, `from_char`, `to_char`, `line`), ordering (`order = "asc" | "desc" | "center" | "random"`, `seed`), and a reusable `info` table (`progress`, `n`, `count`, `first`, `last`, plus `char`, `char_index`, `index_in_char` on `mt.each_part`). Note that `info` is reused across iterations; copy fields out if you need to store them. Pass `info.progress` into `mt.stagger_progress(progress, info.progress, span)` (where `span` in `0.0`-`1.0` controls overlap and guarantees every element finishes at `progress == 1.0`). For time-based stagger by index, use `mt.stagger(time, index, delay, duration)` or `mt.stagger_pattern(time, index, count, pattern, delay, duration, seed?)`. Seed random ordering or random stagger with `ctx.meta.instance_seed` so multiple clip instances do not repeat the identical random pattern:
 
 ```lua
 local options = { order = "random", seed = ctx.meta.instance_seed }
@@ -341,7 +341,7 @@ end
 
 ## 6. Colors, gradients and textures
 
-A color is `{ r = 1.0, g = 0.5, b = 0.0, a = 1.0 }`, each component `0.0`–`1.0`. Partial assignment merges with the current value; unknown keys raise an error.
+A color is `{ r = 1.0, g = 0.5, b = 0.0, a = 1.0 }`, each component `0.0`-`1.0`. Partial assignment merges with the current value; unknown keys raise an error.
 
 ```lua
 character.fill.color = { a = 0.5 }        -- keeps r/g/b, changes alpha only
@@ -350,8 +350,8 @@ character.fill.color.a = character.fill.color.a * 0.5
 
 RGBA is the storage format. Calculate derived colors in the OKLab perceptual family:
 
-- Blending two colors: `mt.color.lerp_oklab(from, to, t)` — perceptually uniform, no muddy midpoint.
-- Hue travel / rainbow transitions: `mt.color.lerp_oklch(from, to, t, hueMethod?)` — shortest hue path by default; pass `"long"` as the 4th argument to travel the long way around the hue wheel (`lerp_oklab` may pass near the neutral axis).
+- Blending two colors: `mt.color.lerp_oklab(from, to, t)` - perceptually uniform, no muddy midpoint.
+- Hue travel / rainbow transitions: `mt.color.lerp_oklch(from, to, t, hueMethod?)` - shortest hue path by default; pass `"long"` as the 4th argument to travel the long way around the hue wheel (`lerp_oklab` may pass near the neutral axis).
 - Per-character hue sequences: `mt.color.from_oklch(lightness, chroma, hueDegrees, alpha?)` or `mt.color.from_okhsl(hue01, saturation01, lightness01, alpha?)`.
 - Modifying one perceptual component of an existing color: decompose with `mt.color.to_oklch(color)` / `to_okhsl(color)` / `to_oklab(color)`, adjust the field, and rebuild with `from_oklch` / `from_okhsl` / `from_oklab`.
 - Lightness adjustments (tinting toward white or black): use `mt.color.from_okhsl` / `to_okhsl`, where `lightness = 1.0` is pure white and `0.0` is black. Do not use OKHSV for lightness: in `from_okhsv` / `to_okhsv`, `value = 1.0` is the most vivid saturated color, not white; use OKHSV only when HSV-like value semantics are wanted, and always prefer `from_okhsv` over compatibility-only `from_hsv`.
@@ -376,21 +376,22 @@ character.fill.color = mt.color.lerp_oklch(redColor, blueColor, t)
 
 A texture states what the letters are made of. **Choose one only when the user asked for that look or named a material**; a request to move, time, or arrange text is not a reason to add one. `"none"` is the default and is usually right.
 
-`texture.p1`–`p4` are material control slots whose meaning depends on `texture.type`, in order `p1`, `p2`, `p3`, `p4`:
+`texture.p1`-`p5` change meaning with `texture.type`. `p1`-`p3` are `0`-`1` (clamped when drawn); unless marked, `p4` is the light angle in degrees and angles wrap. `p5` is read only where listed. Counts and sizes are measured across 0.75 em (a shape's longer side) on a ratio scale, written `0->a, 0.5->b, 1->c`. `color` means `texture.color`; where not listed it tints the light added on top of the fill (white = untinted).
 
-- `water_droplet`: `p1` = thickness, `p2` = roundness, `p3` = gloss, `p4` = light angle (degrees).
-- `air_cushion`: `p1` = inflation, `p2` = seal width, `p3` = wrinkles, `p4` = light angle (degrees).
-- `glitter`: `p1` = flake size (`0` removes flakes), `p2` = highlight ratio (`0` lights none, `1` lights all, placement fixed), `p3` = flake amount (`0` removes all flakes and glow, `1` full density; remaining flakes keep positions and colours), `p4` = light angle (degrees). `texture.color` is the metal colour; hue spread is fixed at full range around it. Lit flakes have a bright core and soft glow within the text outline.
-- `iridescent`: `p1` = film thickness, `p2` = hue range, `p3` = strength, `p4` = light angle (degrees). Ignores `texture.color`.
-- `faceted`: `p1` = facet count, `p2` = bevel depth, `p3` = polish, `p4` = light angle (degrees).
-- `stained_glass`: `p1` = piece size (relative to untransformed character), `p2` = lead width (`0` removes lead), `p3` = hue range (spreads from the fill colour underneath), `p4` = glow (`0.0`–`1.0`: `0.5` is plain glass, above `0.5` emits light, **below `0.5` darkens toward `0`**). `texture.color` is **the lead colour**.
-- `metallic`: `p1` = polish (`0` matte, `1` mirror), `p2` = relief, `p3` = reflection contrast, `p4` = light angle (degrees). Takes the metal colour from the **fill** and uses `texture.color` as the light colour.
-- `metallic_2`: `p1` = polish (`0` matte, `1` mirror), `p2` = relief, `p3` = exposure (`0.5` is neutral studio brightness), `p4` = light angle (degrees). Takes the metal colour from the **fill** and uses `texture.color` as the light colour.
-- `stripe`: `p1` = stripe count across the part's longer side (2 to 24), `p2` = stripe width as the share of each period (0.1 to 0.9), `p3` = strength (`0` leaves the fill, `1` paints the stripe colour in full), `p4` = angle the stripes run (degrees; `0` along the part's x axis). `texture.color` is **the stripe colour**. The pattern is centred on the part and travels with it, so each part carries its own stripes.
-- `colored_pencil`: a solid pencil fill with the paper showing through it as thin tapered scratches, plus a clean narrow bare band just inside the edges that face the light. The fill is the pencil colour and `texture.color` is the paper, so the scratches are white by default. `p1` = scratch density (`0` draws no scratches, `0.5` is 62 rows across the part's longer side and `1` is 240), `p2` = scratch length (`0` half the usual, `1` twice it), `p3` = light amount (`0` ignores the light; more widens the bare band along the lit edges and shows more paper on the lit side), `p4` = stroke angle (degrees; `0` along the part's x axis), `p5` = light angle (degrees, the direction the light comes from on screen: `0` right, `90` bottom, `180` left, `270` top; API level 14). The scratches are scattered at random and stay put frame to frame.
-- `halftone` and `halftone_diamond`: round and diamond dots on one grid. `p1` = dot count across the part's longer side (4 to 40), `p2` = dot size (`0` removes the dots; a diamond is drawn with the circle's area, and neighbours merge at `0.6`), `p3` = fade (`0` keeps every dot the same size, `1` shrinks them to nothing at the far end of the fade direction), `p4` = grid angle (degrees; `45` turns round dots into the diamond lattice and diamonds into upright squares), `p5` = fade angle (degrees; `0` thickens the dots downwards and each quarter turn carries that on clockwise, independent of `p4`; API level 14). `texture.color` is **the dot colour**. The grid is centred on the part and travels with it.
+- `water_droplet`: p1 thickness, p2 roundness, p3 gloss.
+- `air_cushion`: p1 inflation, p2 seal width, p3 wrinkles.
+- `glitter`: p1 flake size (`0` none), p2 share of flakes that glint white, p3 flake amount (`0` none). color = base colour; flake hues spread around it.
+- `iridescent`: p1 film thickness, p2 hue range, p3 strength, p5 film variation (`0` even, `1` swirling patches). Ignores color.
+- `faceted` (carved stone): p1 curve fineness (`0` coarse; from `0.7` curves blend smooth; `1` ridges only), p2 bevel depth, p3 polish.
+- `stained_glass`: p1 piece size (relative to the untransformed character), p2 lead width (`0` none), p3 hue range around the fill, p4 glow `0`-`1` (`0.5` plain, higher emits, **lower darkens**). color = lead.
+- `metallic` (brushed): p1 polish (`0` matte, `1` mirror), p2 relief, p3 reflection contrast, p5 hairline angle (`0` = part x axis). **Fill = metal colour**; color = light.
+- `metallic_2` (chrome): p1 polish, p2 relief, p3 exposure (`0.5` standard). **Fill = metal colour** (gold `#D4AF37`, silver `#C0C0C0`, copper `#B87333`); color tints only the bright reflections.
+- `stripe`: p1 count (`0->0.375, 0.5->5, 1->60`), p2 width as share of the period, p3 strength (`0` fill only, `1` full colour), p4 stripe angle. color = stripes.
+- `colored_pencil`: fill = pencil, color = paper showing through as scratches. p1 density (`0` none, `0.5->62` rows, `1->240`), p2 scratch length (`0` half, `1` double), p3 light amount (bare band on lit edges; `0` ignores light), p4 stroke angle, p5 light direction on screen (`0` right, `90` bottom, `180` left, `270` top).
+- `halftone` / `halftone_diamond`: p1 dot count (`0->1, 0.5->6.3, 1->40`), p2 dot size (`0` none, `0.6` dots touch), p3 fade (`0` uniform, `1` shrinks to nothing), p4 grid angle (`0` diamond lattice / upright squares, `45` square grid), p5 fade direction (`0` thickens downward, each `90` turns it clockwise). color = dots.
+- `prism_foil` (holographic sticker; replaces the fill with silver tiles): p1 tile side (`0->0.05, 0.5->0.45, 1->3` times), p2 hue range (`0` plain silver), p3 strength (`0` fill only, about `0.63` full foil, higher widens glare), p4 light angle on screen (does not turn with the part), p5 tile grid angle. color = silver tint.
 
-Slot values `p1`–`p3` (and `stained_glass` `p4`) are `0.0`–`1.0` (clamped when drawn); angles in `p4` and `p5` are in degrees and wrap around (which is why the field reference marks `p1`–`p5` as `unitless`). Unless noted above, `texture.color` tints the light added on top of the fill (white leaves it untinted). On a character, part, or shape, set `texture.use = true` or the inherited texture stays.
+Pattern angles (`stripe`, `colored_pencil`, `halftone` p4): `0` leans like a stripe rising to the right, `45` runs along the part's x axis, `135` along its y axis. Patterns are centred on each part and move with it. On a character, part, or shape, set `texture.use = true` or the inherited texture stays.
 
 ## 7. Paths, text and drawing order
 
@@ -403,7 +404,7 @@ Mug Typography provides four visual element types. Pick the one that matches the
    - Affected by `ctx.global` transforms, `ctx.camera` 3D projection, `mt.layout.reflow`, `mt.layout.measure_bounds_2d`, `mt.layout.pivot_at_2d`, `mt.layout.match_pose`, Write-On, Gradient, Bounding Box, Inspector Deform, Crayon, and `ctx.output.manual_order_text`.
    - Note: `character.z_index` is ignored on text characters (use `ctx.output.manual_order_text` for 2D text draw order, or `ctx.chars[i].z` / `ctx.parts[i].z` for 3D depth).
 2. `ctx.parts[i]` (Sub-character glyph components):
-   - Created automatically from each character's decomposed solid contours (holes stay attached to their owning solid; up to `ctx.meta.limits.max_parts`).
+   - Created automatically from each character's decomposed solid contours (holes stay attached to their owning solid; up to `ctx.meta.limits.max_parts`). With `ctx.global.single_part_glyph = true`, each font glyph is one part.
    - Nested inside `ctx.chars[i]` (`i = part.character_index`); inherits transform and style from its owning character.
    - Reached via `mt.each_part(ctx)` or `character.part_start` / `character.part_count` in `OnLayout`, and via `ctx.paths` in `OnPath` for outline point editing (`part.path:map_points`, `set_svg`, etc.).
 3. `ctx.glyphs:declare` (Custom glyphs inserted into `ctx.global.text`):
@@ -439,7 +440,7 @@ path:move_to(0, 0)                                 -- RIGHT
 
 ### Shape drawing is Y-DOWN; shape placement is Y-UP
 
-Coordinates that draw a shape are **Y-down**: path editing (`MtDrawingPath`, origin at part center or shape position, `1000` units = `1` em, independent of canvas resolution) and drawing-space bounding-box offsets (`ctx.bounding_box.fill_offset_y`, `stroke_offset_y`). Coordinates and metrics that place a shape are **Y-up**: position, offset, pivot, geometry bounds/origins/advances, and custom-glyph `bounds` / `advance_*`.
+Coordinates that draw a shape are **Y-down**: path editing (`MtDrawingPath`, origin at part center or shape position, `1000` units = `1` em, independent of canvas resolution). Coordinates and metrics that place a shape are **Y-up**: position, offset, pivot, geometry bounds/origins/advances, and custom-glyph `bounds` / `advance_*`.
 
 `ctx.paths` is rebuilt every frame, so apply path edits every frame; untouched parts keep their glyph outline.
 
@@ -573,7 +574,7 @@ Leading Lua comments configure the simulator and host; they are not runtime API.
 -- @title Falling Letters
 -- @author Mug
 -- @version 1.0
--- @api_level 14
+-- @api_level 15
 -- @input number 1 "Amplitude" default=15.0
 --[[ @description
 Characters fall into place one by one.
@@ -654,7 +655,7 @@ Preserves Inspector transforms and uses fixed-duration transitions. The number i
 -- @MugTypography
 -- @title Staggered Drop
 -- @version 1.0
--- @api_level 14
+-- @api_level 15
 -- @input number 1 "Travel" default=0.15
 --[[ @description
 Letters drop into place and leave downward with staggered timing.
@@ -700,14 +701,14 @@ The field tables and contract sections define the values; verify the script's us
 1. Frame independence: all values derive from current inputs; no `x = x + 1` style accumulation; shared locals are overwritten each frame before use (Callbacks).
 2. Access: each write is allowed by the field's `W:` phases (writing `ctx.global` or `ctx.camera` in `OnLayout` raises an error); counts and collections are read only in `OnLayout` / `OnPath`; indexes are 1-based (Callbacks).
 3. Units and reference points: offsets and pivots are composed around `0.5` (`offset + delta`), never reset to a bare `0.0`; no `geometry` canvas coordinate is assigned to a pivot; em lengths such as `shadow.distance` and `blur.amount_*` stay near font-size scale; pre/post-global spaces match (Coordinates and transforms).
-4. Direction: 2D angles are clockwise-positive (`shadow.angle = 90` is down); vectors from an angle use `mt.polar_offset_2d`; drawing paths and bounding-box fill/stroke Y offsets are Y-down while placement is Y-up (Coordinates and transforms; Paths, text and drawing order).
+4. Direction: 2D angles are clockwise-positive (`shadow.angle = 90` is down); vectors from an angle use `mt.polar_offset_2d`; drawing paths are Y-down while placement and offsets are Y-up (Coordinates and transforms; Paths, text and drawing order).
 5. Placement: measured post-global positions (`measure_bounds_2d`, `get_canvas_position_2d`) go through `place_2d` / `canvas_to_offset_2d` / `pivot_at_2d`; pivots change only to change a rotation/scale reference; per-character `scale` / `stretch_*` changes are followed by `mt.layout.reflow` when spacing must follow; custom-glyph decorations declare zero-area `bounds`, sit on a line of their own, are placed by measurement, and are ordered in front or behind on purpose, whereas standalone backgrounds/frames use `ctx.shapes` (Coordinates and transforms; Paths, text and drawing order).
 6. Inspector composition: unrelated settings are preserved; direct assignments are intentional replacements; each individual style (`fill`, `stroke`, `shadow`, `texture`, `blur`) is paired with `use = true` in the same callback and keeps effective inherited components via `mt.<group>.resolve` for partial changes (Inspector composition and style inheritance).
 7. Timing: fixed-duration transitions use `mt.timeline.intro_outro_seconds` or `mt.timeline.remaining`; clip-proportional timing is intentional; random ordering/stagger is seeded with `ctx.meta.instance_seed` (Time and transitions).
 8. API calls: defaults, enums, table shapes, and argument units come from the full entries; `ctx.paths`, `ctx.glyphs`, `ctx.shapes`, `ctx.shape_cameras`, and `path` methods use colons (`:`); no deprecated APIs (Reference lookup; Paths, text and drawing order).
 9. Rendering policy: 3D is disabled (`ctx.output.force_disable_3d_projection = true`) only when explicitly required; textures are added only when the request or material requires them (Essential contract).
 10. Color: OKLab (`lerp_oklab`) for blending, OKLCH (`lerp_oklch`, `from_oklch`) for hue travel, OKHSL (`from_okhsl`) rather than OKHSV for lightness changes (Colors, gradients and textures).
-11. Delivery: complete new scripts declare `-- @api_level 14`; `@input` declarations match used `ctx.inputs` slots; diagnostic `print(...)` calls are removed (Script metadata header; Execution environment and compatibility).
+11. Delivery: complete new scripts declare `-- @api_level 15`; `@input` declarations match used `ctx.inputs` slots; diagnostic `print(...)` calls are removed (Script metadata header; Execution environment and compatibility).
 12. Creative intent: requested restraint and readability are respected; built-in physics, layout, path, part, shape, and optical helpers are used where appropriate; each secondary motion or optical change serves the requested effect (Motion design and animation principles).
 
 State assumptions that affect the result and any required facts that remain unknown.
@@ -751,9 +752,9 @@ ctx.meta : MtMeta [R:all read-only]
 ctx.inputs : MtScriptInputs [R:all read-only]
  Fixed Inspector input arrays.
 ctx.global : MtGlobal [R:pre,layout,path read-only]
- Writable base global parameters.
+ Global parameters (writable in OnPreLayout).
 ctx.camera : MtCamera [R:pre,layout,path read-only]
- Writable base 3D camera parameters.
+ 3D camera parameters (writable in OnPreLayout).
 ctx.chars : MtCharacter[] [R:layout,path read-only]
  Resolved characters, indexed from 1.
 ctx.parts : MtPart[] [R:layout,path read-only]
@@ -893,6 +894,8 @@ ctx.global.line_spacing : number [R:pre,layout,path W:pre]
  Line spacing multiplier.
 ctx.global.vertical : boolean [R:pre,layout,path W:pre]
  Whether vertical writing is enabled.
+ctx.global.single_part_glyph : boolean [R:pre,layout,path W:pre]
+ Combine each font glyph into one part. Set true when text fades or is translucent and the script does not move parts individually: with false, a font whose contours overlap shows the overlaps more opaque and draws stroke edges inside the glyph. Keep false for part-level effects (ctx.parts, mt.each_part, part-unit Write-On, Morph, ctx.paths edits), since each glyph would then be a single part that cannot be split into its strokes. Changing it changes ctx.part_count and part indices; custom glyphs and color emoji keep their own parts. Default false in the Scripting preset.
 ctx.global.h_align : string [R:pre,layout,path W:pre]
  values=left|center|right
  Horizontal alignment.
@@ -1362,14 +1365,14 @@ ctx.bounding_box.fill_offset_x : number [R:layout,path W:layout]
  unit=font_size_percent  base=100.0 = one font size, horizontal
  Horizontal fill offset.
 ctx.bounding_box.fill_offset_y : number [R:layout,path W:layout]
- unit=font_size_percent  axis=y_down  base=100.0 = one font size, vertical
- Vertical fill offset; positive moves downward.
+ unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
+ Vertical fill offset.
 ctx.bounding_box.stroke_offset_x : number [R:layout,path W:layout]
  unit=font_size_percent  base=100.0 = one font size, horizontal
  Horizontal stroke offset.
 ctx.bounding_box.stroke_offset_y : number [R:layout,path W:layout]
- unit=font_size_percent  axis=y_down  base=100.0 = one font size, vertical
- Vertical stroke offset; positive moves downward.
+ unit=font_size_percent  axis=y_up  base=100.0 = one font size, vertical
+ Vertical stroke offset.
 ```
 
 ### ctx.output
@@ -1634,25 +1637,25 @@ ctx.global.blur / ctx.chars[i].blur / ctx.parts[i].blur.glow : number [R:pre,lay
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.use : boolean [R:layout,path W:layout]
  Whether this element's own texture is used instead of the inherited one. Ignored on ctx.global.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.type : string [R:pre,layout,path W:pre,layout]
- values=none|water_droplet|air_cushion|glitter|iridescent|faceted|stained_glass|metallic|metallic_2|stripe|colored_pencil|halftone|halftone_diamond
+ values=none|water_droplet|air_cushion|glitter|iridescent|faceted|stained_glass|metallic|metallic_2|stripe|colored_pencil|halftone|halftone_diamond|prism_foil
  Fill material; none paints the plain fill.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p1 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- First shared material control; 0..1 for every type. Its meaning follows texture.type (water_droplet thickness, air_cushion inflation, glitter flake size where 0 removes the flakes, iridescent film thickness, faceted facet count, stained_glass piece size relative to the untransformed character, metallic and metallic_2 polish where 0 is matte and 1 is a mirror, stripe count from 2 to 24 across the part's longer side, halftone and halftone_diamond dot count from 4 to 40 across it, colored_pencil scratch density where 0 draws no scratches, 0.5 is 62 rows of them across the part's longer side and 1 is 240). Out-of-range values are clamped when drawn; the stored value is unchanged.
+ Material slot 1, 0..1; meaning per texture.type in Section 6 Textures.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p2 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- Second shared material control; 0..1 for every type (water_droplet roundness, air_cushion seal width, glitter highlight ratio, iridescent hue range, faceted bevel depth, stained_glass lead width; 0 removes the lead; metallic and metallic_2 relief, stripe width as the share of each period the stripe fills, from 0.1 to 0.9, halftone and halftone_diamond dot size, as a circle's radius share of its cell from 0 for no dots to 0.6 where neighbours merge; a diamond is drawn with the same area, colored_pencil scratch length where 0 is half the usual length and 1 is twice it).
+ Material slot 2, 0..1; meaning per texture.type in Section 6 Textures.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p3 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- Third shared material control; 0..1 for every type (water_droplet gloss, air_cushion wrinkles, glitter flake amount, iridescent strength, faceted polish, stained_glass hue range, metallic reflection contrast, metallic_2 exposure where 0.5 is the neutral studio, stripe strength where 0 leaves the fill and 1 paints the stripe colour in full, halftone and halftone_diamond fade where 0 keeps every dot the same size and 1 shrinks the dots to nothing at the far end of the fade direction set by p5, colored_pencil light amount, the width of the bare band along the edges facing the light and how much more of the paper shows on the lit side, where 0 ignores the light). Glitter flake amount is 0 for no flakes and 1 for full density; its hue spread is fixed at full range around texture.color. Stained glass hue range spreads from the fill underneath.
+ Material slot 3, 0..1; meaning per texture.type in Section 6 Textures.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p4 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- Fourth shared material control. Light angles (water_droplet, air_cushion, glitter, iridescent, faceted, metallic, metallic_2) are degrees and wrap; stained_glass glow is 0..1 whose midpoint 0.5 is plain glass, above it the panes emit and below it they darken. Stripe angle is the direction the stripes run in degrees, wrapping; 0 runs along the x axis and 90 along the y axis of the part. Halftone and halftone_diamond grid angle turns the grid of dots by the same rule; 45 gives the diamond lattice of round dots and upright squares of diamonds. Colored pencil stroke angle turns the scratches by the same rule.
+ Material slot 4, an angle in degrees for most types; meaning per texture.type in Section 6 Textures.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.p5 : number [R:pre,layout,path W:pre,layout]
  unit=unitless
- Fifth shared material control, read only by halftone, halftone_diamond and colored_pencil. For halftone and halftone_diamond it is the fade angle in degrees: 0 thickens the dots downwards and each quarter turn carries the direction clockwise on screen, independent of the grid angle in p4. For colored_pencil it is the light angle in degrees, the direction the light comes from on screen: 0 is the right, 90 the bottom, 180 the left and 270 the top, and the edges facing it are left bare. Defaults to 0; other types ignore it.
+ Material slot 5, read only by some types; meaning per texture.type in Section 6 Textures.
 ctx.global.texture / ctx.chars[i].texture / ctx.parts[i].texture.color : MtColor [R:pre,layout,path W:pre,layout]
- Tints the light the material adds on top of the fill; white leaves it untinted. Glitter uses it as the metal colour and stained_glass as the lead colour; iridescent ignores it. Metallic and metallic_2 use it as the light colour and take the metal colour from the fill. Stripe, halftone and halftone_diamond paint their stripes and dots in this colour; white is the default. Colored pencil uses it as the paper that shows through the fill, so the scratches take this colour and white is the default.
+ Material colour; its role per texture.type is in Section 6 Textures (default: tints the added light, white = none).
 ```
 
 ### color value
@@ -1741,6 +1744,8 @@ mt.polar_offset(angleDegrees, radius) -> number, number
  Deprecated screen-oriented polar vector, whose Y must be negated before it reaches offset_y; use polar_offset_2d. DEPRECATED.
 mt.polar_offset_2d(angleDegrees, radius) -> number, number
  Converts a polar direction (degrees) and radius into a Y-up canvas offset pair, ready to add to offset_x and offset_y.
+mt.direction_to_rotation_2d(dx, dy, aspectRatio?) -> number
+ Converts an equally scaled Y-up vector to clockwise degrees in [-180, 180]; zero vector returns 0. Optional aspectRatio scales X (default 1); pass ctx.canvas.aspect_ratio for width/height normalized deltas.
 mt.smoothstep(edge0, edge1, value) -> number
  Smooth Hermite transition across a range.
 mt.cycle(t, period) -> number
@@ -1766,7 +1771,7 @@ mt.noise1(x, seed?) -> number
 mt.noise2(x, y, seed?) -> number
  Deterministic smooth two-dimensional value noise.
 mt.spring(t, frequency, damping) -> number
- Damped oscillation from 1 toward 0 (may go negative while overshooting). Intended for residual displacement, not raw 0–1 progress.
+ Damped oscillation from 1 toward 0 (may go negative while overshooting). Intended for residual displacement, not raw 0-1 progress.
 mt.wave(t, frequency, phase?) -> number
  Sine wave shorthand.
 mt.wave_square(t, frequency, phase?) -> number
@@ -2029,6 +2034,7 @@ start from Index by Purpose when you only know the goal. Do not read end to end.
 - Deterministic random values and noise (scatter, camera shake, tremor) : `mt.random` / `mt.random_range` / `mt.distributed_random` / `mt.noise1` / `mt.noise2` / `mt.wiggle`
 - Cycles and springs (floating, harmonic wave, damped oscillation) : `mt.cycle` / `mt.pingpong` / `mt.wave` / `mt.wave_square` / `mt.wave_triangle` / `mt.wave_sawtooth` / `mt.spring`
 - Displacement from polar coordinates (radial scatter, orbit, explosion) : `mt.polar_offset_2d`
+- Rotation from a direction vector, with optional aspect correction : `mt.direction_to_rotation_2d`
 - Physical motion (ballistic trajectory, ground bounce, friction decay) : `mt.bounce_y` / `mt.bounce_x` / `mt.bounce_ground` / `mt.bounce_wall` / `mt.impact_squash` / `mt.projectile_2d` / `mt.friction_decay`
 - Color (hue shift, interpolation, perceptually uniform) : `mt.color.resolve_fill` / `mt.color.from_*` / `mt.color.to_*` / `mt.color.lerp*` / `mt.color.with_alpha`
 - Resolved shadow, blur, stroke and texture of an element (read the value inherited from a higher tier) : `mt.shadow.resolve` / `mt.blur.resolve` / `mt.stroke.resolve` / `mt.texture.resolve`
@@ -2059,13 +2065,13 @@ RET
 
 #### `mt.saturate(value)`
 
-Shorthand for `mt.clamp(value, 0.0, 1.0)`. Use it to keep progress or alpha values within 0–1.
+Shorthand for `mt.clamp(value, 0.0, 1.0)`. Use it to keep progress or alpha values within 0-1.
 
 ARGS
-- `value` (`number`) Value to constrain to 0–1
+- `value` (`number`) Value to constrain to 0-1
 
 RET
-- `number` 0–1 -- Value constrained to 0–1
+- `number` 0-1 -- Value constrained to 0-1
 
 #### `mt.remap(value, in_low, in_high, out_low, out_high, clamped?)`
 
@@ -2075,7 +2081,7 @@ ARGS
 - `value` (`number`) Value to convert
 - `in_low` / `in_high` (`number`) Input interval
 - `out_low` / `out_high` (`number`) Output interval
-- `clamped` (`boolean` default `false`) If `true`, constrains the input position to 0–1 before conversion
+- `clamped` (`boolean` default `false`) If `true`, constrains the input position to 0-1 before conversion
 
 RET
 - `number` -- Converted value
@@ -2116,7 +2122,7 @@ Linearly interpolates from `from` to `to`.
 ARGS
 - `from` (`number`) Value when `t = 0`
 - `to` (`number`) Value when `t = 1`
-- `t` (`number`) Interpolation factor. It is not clamped, so values outside 0–1 produce extrapolation
+- `t` (`number`) Interpolation factor. It is not clamped, so values outside 0-1 produce extrapolation
 
 RET
 - `number` Same as the input values -- `from + (to - from) * t`
@@ -2159,7 +2165,7 @@ ARGS
 - `value` (`number`) Value to evaluate
 
 RET
-- `number` 0–1 -- Smooth transition value. Clamped outside the interval
+- `number` 0-1 -- Smooth transition value. Clamped outside the interval
 
 ERRORS
 
@@ -2173,7 +2179,7 @@ ARGS
 - `keys` (`table[]`) Array of keyframes. Each element has the form `{ t = <time>, v = <value>, ease = <optional> }`, ordered by ascending `t`
 - `time` (`number` seconds) Time to evaluate
 
-Each key’s `v` must be either a number or a color table of the form `{ r, g, b, a }`; the two types cannot be mixed within one `keys` array. `ease` is optional (linear by default) and is applied to the interval **leading up to that key**. You can pass a string naming an easing function, such as `mt.ease.out_bounce`, or any easing function in the form `function(t) ... end`.
+Each key's `v` must be either a number or a color table of the form `{ r, g, b, a }`; the two types cannot be mixed within one `keys` array. `ease` is optional (linear by default) and is applied to the interval **leading up to that key**. You can pass a string naming an easing function, such as `mt.ease.out_bounce`, or any easing function in the form `function(t) ... end`.
 
 If `time` is before the first key, the first value is returned; if it is after the last key, the last value is returned (clamping).
 
@@ -2202,14 +2208,14 @@ character.fill.color = tint
 
 #### `mt.distribute(index, count)`
 
-Distributes a 1-based index evenly across 0–1. The first index maps to `0`, and the last maps to `1`.
+Distributes a 1-based index evenly across 0-1. The first index maps to `0`, and the last maps to `1`.
 
 ARGS
 - `index` (`integer`) 1-based index, such as an index for `ctx.chars[index]`
 - `count` (`integer`) Total count, such as `ctx.char_count`
 
 RET
-- `number` 0–1 -- `(index - 1) / (count - 1)` constrained to 0–1. Returns `0` if `count <= 1`
+- `number` 0-1 -- `(index - 1) / (count - 1)` constrained to 0-1. Returns `0` if `count <= 1`
 
 ```lua
 -- Arrange hues in a rainbow according to character position
@@ -2269,7 +2275,7 @@ RET
 
 Fields of `info`:
 
-- `progress` : `number` : Normalized position in 0–1 following `order`
+- `progress` : `number` : Normalized position in 0-1 following `order`
 - `n` : `integer` : 1-based counter within the filtered subset
 - `count` : `integer` : Number of elements in the filtered subset (at least `1`)
 - `first` / `last` : `boolean` : Whether this is the first or last element of the filtered subset
@@ -2319,7 +2325,7 @@ RET
 - `char_index` : `integer` : Index of the owning character in `ctx.chars`
 - `index_in_char` : `integer` : Position within the owning character
 
-`info.progress` spans the **whole filtered set** across 0–1. It does not restart on character boundaries. To span 0–1 per character, nest `mt.each_char` and `mt.each_part`.
+`info.progress` spans the **whole filtered set** across 0-1. It does not restart on character boundaries. To span 0-1 per character, nest `mt.each_char` and `mt.each_part`.
 
 ```lua
 -- Lift the parts of characters 3 through 5 in one continuous run
@@ -2340,7 +2346,7 @@ ARGS
 - `duration` (`number` seconds) Animation duration for each index
 
 RET
-- `number` 0–1 -- Progress clamped to 0–1
+- `number` 0-1 -- Progress clamped to 0-1
 
 ERRORS
 
@@ -2355,7 +2361,7 @@ end
 
 #### `mt.stagger_progress(progress, position, span)`
 
-Adds a position-dependent start delay to an existing 0–1 normalized progress for synchronized group cascade within a shared window.
+Adds a position-dependent start delay to an existing 0-1 normalized progress for synchronized group cascade within a shared window.
 The element at `position = 0` starts with the shared progress, while the element
 at `position = 1` starts when the shared progress reaches `span`. Every element
 finishes when the shared progress reaches 1.
@@ -2366,12 +2372,12 @@ progress already obtained from a helper such as
 `mt.timeline.intro_outro_seconds`.
 
 ARGS
-- `progress` (`number` 0–1) Shared progress to distribute. Values outside the range are accepted, and the result is clamped to 0–1
-- `position` (`number` 0–1) Normalized element position. Values outside the range are clamped to 0–1. Usually `info.progress`
+- `progress` (`number` 0-1) Shared progress to distribute. Values outside the range are accepted, and the result is clamped to 0-1
+- `position` (`number` 0-1) Normalized element position. Values outside the range are clamped to 0-1. Usually `info.progress`
 - `span` (`number` less than 1) Fraction of the shared window across which start times are distributed
 
 RET
-- `number` 0–1 -- Progress for the element at `position`
+- `number` 0-1 -- Progress for the element at `position`
 
 The result is calculated as follows:
 
@@ -2419,7 +2425,7 @@ ARGS
 `"random"` assigns a duplicate-free shuffled rank to each index. Ranks are always exactly one apart, so the delays stay evenly spaced.
 
 RET
-- `number` 0–1 -- Progress clamped to 0–1
+- `number` 0-1 -- Progress clamped to 0-1
 
 ERRORS
 
@@ -2429,7 +2435,7 @@ ERRORS
 
 #### `mt.falloff(distance, radius)`
 
-Returns an influence weight that is strongest at the center and decreases smoothly with distance (wavefront, passing shine, ripple, shockwave, localized emphasis). The return value is 0–1.
+Returns an influence weight that is strongest at the center and decreases smoothly with distance (wavefront, passing shine, ripple, shockwave, localized emphasis). The return value is 0-1.
 
 ARGS
 - `distance` (`number` Input coordinate system) Distance from the center of the effect
@@ -2440,7 +2446,7 @@ This is a standard choice for **concentrating an effect around a particular posi
 Choosing between it and `mt.smoothstep`: `smoothstep` becomes exactly 0 outside its range, creating a cutoff, whereas `falloff` has a tail that continues indefinitely. As a result, a moving crest or light appears to **pass through continuously**. It also avoids the corner produced by linear falloff such as (`1 - d/r`).
 
 RET
-- `number` 0–1 -- Distance-based influence weight
+- `number` 0-1 -- Distance-based influence weight
 
 ```lua
 -- Raise only the characters currently being passed by the waveFront
@@ -2467,7 +2473,7 @@ ARGS
 - `channel` (`string` optional) Name separating one use from another.
 
 RET
-- `number` 0–1 -- Random value in `[0, 1)`. The same arguments always produce the same value
+- `number` 0-1 -- Random value in `[0, 1)`. The same arguments always produce the same value
 
 ERRORS
 
@@ -2518,7 +2524,7 @@ ARGS
 - `seed` (`integer` default `0`) Value that changes the fluctuation pattern
 
 RET
-- `number` -1–1 -- Continuous value that is always the same for the same arguments
+- `number` -1-1 -- Continuous value that is always the same for the same arguments
 
 ```lua
 -- Handheld-camera-style shake with a different phase for each character
@@ -2527,14 +2533,14 @@ character.rotation = mt.noise1(ctx.time * 0.8, index) * 4.0
 
 #### `mt.noise2(x, y, seed?)`
 
-Deterministic two-dimensional value noise. Returns smooth fluctuation at position `(x, y)`. Passing time on one axis and character position on the other can create fluctuation that “flows through space.”
+Deterministic two-dimensional value noise. Returns smooth fluctuation at position `(x, y)`. Passing time on one axis and character position on the other can create fluctuation that "flows through space."
 
 ARGS
 - `x` / `y` (`number`) Sample position
 - `seed` (`integer` default `0`) Value that changes the fluctuation pattern
 
 RET
-- `number` -1–1 -- Continuous value that is always the same for the same arguments
+- `number` -1-1 -- Continuous value that is always the same for the same arguments
 
 #### `mt.wiggle(time, frequency, amplitude, octaves?, seed?)`
 
@@ -2563,7 +2569,7 @@ ARGS
 - `period` (`number` seconds) Length of one cycle
 
 RET
-- `number` 0–1 -- Progress greater than or equal to 0 and less than 1
+- `number` 0-1 -- Progress greater than or equal to 0 and less than 1
 
 ERRORS
 
@@ -2578,7 +2584,7 @@ ARGS
 - `period` (`number` seconds) Length of one round trip
 
 RET
-- `number` 0–1 -- Oscillating value from 0 to 1
+- `number` 0-1 -- Oscillating value from 0 to 1
 
 ERRORS
 
@@ -2594,7 +2600,7 @@ ARGS
 - `phase` (`number` radian default `0`) Phase offset. It can also offset the wave for each index
 
 RET
-- `number` -1–1 -- Waveform value
+- `number` -1-1 -- Waveform value
 
 #### `mt.wave_square(t, frequency, phase?)`
 
@@ -2618,7 +2624,7 @@ ARGS
 - `phase` (`number` radian default `0`) Phase offset
 
 RET
-- `number` -1–1 -- Value that travels linearly back and forth between `-1.0` and `1.0`
+- `number` -1-1 -- Value that travels linearly back and forth between `-1.0` and `1.0`
 
 #### `mt.wave_sawtooth(t, frequency, phase?)`
 
@@ -2630,7 +2636,7 @@ ARGS
 - `phase` (`number` radian default `0`) Phase offset
 
 RET
-- `number` -1–1 -- Repeating value that rises linearly from `-1.0` to less than `1.0`
+- `number` -1-1 -- Repeating value that rises linearly from `-1.0` to less than `1.0`
 
 #### `mt.spring(t, frequency, damping)`
 
@@ -2647,10 +2653,10 @@ RET
 For `t > 0`, it calculates `exp(-damping * t) * cos(2π * frequency * t)`.
 
 > [!WARNING]
-> **The return value is not confined to 0–1.** During damping, it can take **negative values** (and, depending on the phase, overshoot within a range that does not slightly exceed 1). This is the overshoot effect itself, analogous to `mt.ease.out_back` / `elastic` extending outside 0–1.
+> **The return value is not confined to 0-1.** During damping, it can take **negative values** (and, depending on the phase, overshoot within a range that does not slightly exceed 1). This is the overshoot effect itself, analogous to `mt.ease.out_back` / `elastic` extending outside 0-1.
 >
 > - **Suitable uses**: A **residual displacement** such as `offset`, `rotation`, or scatter amount (for example, `0.5 + settle * 0.1`)
-> - **Unsuitable uses**: Direct assignment to progress, `opacity`, `scale`, or `stretch`, or use as the `t` argument to `mt.lerp`. If you need progress, use `mt.ease.*` or `mt.saturate`, and do not multiply a scale factor directly by a negative value (`stretch` has no host-side lower-bound clamp and can reach rendering while still negative. `scale` is clamped to a positive lower bound, and `opacity` is clamped to 0–1 immediately before rendering)
+> - **Unsuitable uses**: Direct assignment to progress, `opacity`, `scale`, or `stretch`, or use as the `t` argument to `mt.lerp`. If you need progress, use `mt.ease.*` or `mt.saturate`, and do not multiply a scale factor directly by a negative value (`stretch` has no host-side lower-bound clamp and can reach rendering while still negative. `scale` is clamped to a positive lower bound, and `opacity` is clamped to 0-1 immediately before rendering)
 
 ```lua
 -- Use as deviation from the target position (maximum at t=0 and converges over time; negative intervals are overshoot)
@@ -2679,6 +2685,20 @@ local angle = mt.distribute(index, ctx.char_count) * 360.0
 local dx, dy = mt.polar_offset_2d(angle, 0.3 * scatterAmount)
 character.offset_x = 0.5 + dx
 character.offset_y = 0.5 + dy
+```
+
+#### `mt.direction_to_rotation_2d(dx, dy, aspectRatio?)`
+
+Returns the clockwise-positive rotation angle in degrees for a Y-up vector. `dx` and `dy` are required numbers; with the third argument omitted, both axes use the same scale (for example, both in pixels). Right is 0, down is 90, up is -90. The result is in [-180, 180]; a zero vector returns 0. This is the inverse direction conversion of `mt.polar_offset_2d` for a positive radius.
+
+The optional `aspectRatio` argument scales X and defaults to 1. For deltas measured as canvas width/height ratios, pass `ctx.canvas.aspect_ratio` as the third argument. The function does not transform between local and global spaces. Use the same coordinate space as the target rotation. The returned heading assumes the object's unrotated forward direction is +X; add an orientation offset for artwork facing another direction.
+
+```lua
+local dx, dy = mt.polar_offset_2d(45, 0.1)
+character.rotation = mt.direction_to_rotation_2d(dx, dy) -- 45 degrees
+
+-- Heading from normalized canvas deltas, with equally scaled axes:
+local heading = mt.direction_to_rotation_2d(deltaX, deltaY, ctx.canvas.aspect_ratio)
 ```
 
 ### 8. Physical Motion
@@ -2746,7 +2766,7 @@ RET (one of)
 - `impact_count` : `integer` : impacts : Number of impacts so far
 - `settled` : `boolean` : Whether the bounce has ended and the object has settled
 
-The table’s `[1]` through `[5]` entries also provide, in order, the axis coordinate, `stretch_x`, `stretch_y`, contact-position correction, and `velocity`.
+The table's `[1]` through `[5]` entries also provide, in order, the axis coordinate, `stretch_x`, `stretch_y`, contact-position correction, and `velocity`.
 
 In positional-argument form, the function returns the axis coordinate, `stretch_x`, `stretch_y`, contact-position correction, `velocity`, `last_impact_time`, `next_impact_time`, and `impact_count`, in that order. `settled` is available only in configuration-table form.
 
@@ -2914,7 +2934,7 @@ character.offset_y = character.offset_y + correction * character.geometry.bounds
 
 > [!TIP]
 > **To vary the amount of compression according to impact velocity, calculate `squash` itself.**
-> There is no argument that accepts velocity directly. With a method that simply multiplies by velocity, the compression reaches its lower limit after only a modest increase in velocity, so increasing the speed further no longer changes the image. Explicitly specifying “the velocity at which maximum compression occurs,” as below, keeps the result within the intended range.
+> There is no argument that accepts velocity directly. With a method that simply multiplies by velocity, the compression reaches its lower limit after only a modest increase in velocity, so increasing the speed further no longer changes the image. Explicitly specifying "the velocity at which maximum compression occurs," as below, keeps the result within the intended range.
 >
 > ```lua
 > local squashAmount = 0.3 * mt.saturate(impactSpeed / kFullSquashSpeed)
@@ -2976,7 +2996,7 @@ part.rotation = flight.rotation
 ##### Keeping the arc readable
 
 The returned `x` / `y` are always a true parabola. When a flight *looks* wrong,
-the trajectory is rarely the cause — something layered on top of it is:
+the trajectory is rarely the cause; something layered on top of it is:
 
 - **Do not touch `pivot_*`.** Leave it at `0.5`. Adding the flight displacement
   to the pivot as well makes the fragment orbit a distant point instead of
@@ -2991,7 +3011,7 @@ the trajectory is rarely the cause — something layered on top of it is:
 
 #### `mt.friction_decay(t, speed, friction)`
 
-Calculates exponential friction deceleration from initial velocity (sliding stop, braking inertia). It lets you control motion that “rushes in and glides to a stop” using the physical quantities initial velocity and coefficient of friction, rather than arrival time.
+Calculates exponential friction deceleration from initial velocity (sliding stop, braking inertia). It lets you control motion that "rushes in and glides to a stop" using the physical quantities initial velocity and coefficient of friction, rather than arrival time.
 
 ARGS
 - `t` (`number` seconds) Elapsed time. Negative values are treated as `0`
@@ -3017,7 +3037,7 @@ character.offset_x = 0.5 - 0.5 + travelled
 
 ### 9. Color
 
-See “color” in Concepts for the color format.
+See "color" in Concepts for the color format.
 RGBA is the color storage format. When calculating colors, select the color space that matches the intent.
 
 #### `mt.color.resolve_fill(ctx, target, options?)`
@@ -3036,7 +3056,7 @@ ARGS
 
 - `color` : `color` : Copy of the resolved solid color, or of `ctx.global.fill.color`, which supplies the starting color for a Global gradient or Crayon
 - `mode` : `string` : `"solid"` / `"gradient"` / `"crayon"` / `"transparent"`
-- `opacity` : `number` : 0–1 : Product of the Global, owning-character, and target-part `opacity` values, clamped to 0–1
+- `opacity` : `number` : 0-1 : Product of the Global, owning-character, and target-part `opacity` values, clamped to 0-1
 
 For a part, resolution checks `part.fill.use`, then the owning character's
 `fill.use`, then Global. For a character, it checks only the character and
@@ -3068,29 +3088,29 @@ The functions below return new tables and do not modify their arguments. `from_*
 from components, `to_*` decomposes a color into a component table, and `lerp*` constructs a color from
 two colors and `t`. An omitted `alpha`, or a missing `a` in a color passed to `to_*`, becomes `1.0`.
 `hue` uses one full turn as its unit; out-of-range input wraps to `[0, 1)`. No interpolation function
-clamps `t`. OKHSV/OKHSL `saturation`, `value`, and `lightness` inputs are constrained to 0–1.
+clamps `t`. OKHSV/OKHSL `saturation`, `value`, and `lightness` inputs are constrained to 0-1.
 `lerp_oklch` / `lerp_okhsv` / `lerp_okhsl` take the shortest hue path by default and inherit the colored
 endpoint's hue when the other endpoint is achromatic. An exact half-turn preserves the sign of the hue difference.
 `lerp_oklch(from, to, t, "long")` takes the longer hue path; `"short"` or omission
 keeps the shorter path. Equal hues make one increasing revolution with `"long"`, including hues inherited
 from a colored endpoint. Other `hueMethod` values are errors.
 
-- `mt.color.lerp(from, to, t)` — Linearly interpolates RGBA components.
-- `mt.color.from_hsv(hue, saturation, value, alpha?)` — Constructs a color from normalized HSV.
-- `mt.color.with_alpha(color, alpha)` — Preserves RGB and replaces only alpha.
-- `mt.color.from_oklch(lightness, chroma, hue, alpha?)` — Constructs a color from OKLCH. Chroma is normally about 0–0.4, and RGB output is constrained to 0–1.
+- `mt.color.lerp(from, to, t)` - Linearly interpolates RGBA components.
+- `mt.color.from_hsv(hue, saturation, value, alpha?)` - Constructs a color from normalized HSV.
+- `mt.color.with_alpha(color, alpha)` - Preserves RGB and replaces only alpha.
+- `mt.color.from_oklch(lightness, chroma, hue, alpha?)` - Constructs a color from OKLCH. Chroma is normally about 0-0.4, and RGB output is constrained to 0-1.
 
-- `mt.color.from_oklab(lightness, aAxis, bAxis, alpha?)` — Creates an RGBA color from OKLab components. RGB output is constrained to 0–1.
-- `mt.color.to_oklab(color)` — Converts to `{ lightness, a, b, alpha }`. Input RGB is not clamped.
-- `mt.color.to_oklch(color)` — Converts to `{ lightness, chroma, hue, alpha }`. Achromatic hue is 0.
-- `mt.color.from_okhsv(hue, saturation, value, alpha?)` — Creates a color from gamut-normalized OKHSV.
-- `mt.color.to_okhsv(color)` — Converts to `{ hue, saturation, value, alpha }`. Achromatic hue is 0.
-- `mt.color.from_okhsl(hue, saturation, lightness, alpha?)` — Creates a color from gamut-normalized OKHSL.
-- `mt.color.to_okhsl(color)` — Converts to `{ hue, saturation, lightness, alpha }`. Achromatic hue is 0.
-- `mt.color.lerp_oklab(from, to, t)` — Interpolates in Cartesian OKLab coordinates.
-- `mt.color.lerp_oklch(from, to, t, hueMethod?)` — Interpolates in OKLCH. `hueMethod` is `"short"` (default) or `"long"`.
-- `mt.color.lerp_okhsv(from, to, t)` — Interpolates in OKHSV along the shortest hue path.
-- `mt.color.lerp_okhsl(from, to, t)` — Interpolates in OKHSL along the shortest hue path.
+- `mt.color.from_oklab(lightness, aAxis, bAxis, alpha?)` - Creates an RGBA color from OKLab components. RGB output is constrained to 0-1.
+- `mt.color.to_oklab(color)` - Converts to `{ lightness, a, b, alpha }`. Input RGB is not clamped.
+- `mt.color.to_oklch(color)` - Converts to `{ lightness, chroma, hue, alpha }`. Achromatic hue is 0.
+- `mt.color.from_okhsv(hue, saturation, value, alpha?)` - Creates a color from gamut-normalized OKHSV.
+- `mt.color.to_okhsv(color)` - Converts to `{ hue, saturation, value, alpha }`. Achromatic hue is 0.
+- `mt.color.from_okhsl(hue, saturation, lightness, alpha?)` - Creates a color from gamut-normalized OKHSL.
+- `mt.color.to_okhsl(color)` - Converts to `{ hue, saturation, lightness, alpha }`. Achromatic hue is 0.
+- `mt.color.lerp_oklab(from, to, t)` - Interpolates in Cartesian OKLab coordinates.
+- `mt.color.lerp_oklch(from, to, t, hueMethod?)` - Interpolates in OKLCH. `hueMethod` is `"short"` (default) or `"long"`.
+- `mt.color.lerp_okhsv(from, to, t)` - Interpolates in OKHSV along the shortest hue path.
+- `mt.color.lerp_okhsl(from, to, t)` - Interpolates in OKHSL along the shortest hue path.
 
 ### 10. Style Inheritance
 
@@ -3153,15 +3173,15 @@ Resolves the texture. Returns `{ type, p1, p2, p3, p4, color }`.
 
 ### 11. Easing
 
-`mt.ease.<name>(t)` accepts progress `t` (normally 0–1) and returns eased progress.
+`mt.ease.<name>(t)` accepts progress `t` (normally 0-1) and returns eased progress.
 A typical use is to add character to the linear progress returned by `mt.stagger` or `mt.cycle`.
-Except for `mt.ease.cubic_bezier`, the input `t` is not clamped automatically. To constrain it to 0–1, pass it through `mt.saturate` first.
+Except for `mt.ease.cubic_bezier`, the input `t` is not clamped automatically. To constrain it to 0-1, pass it through `mt.saturate` first.
 
 Names combine a curve type and a direction.
 
-- `in_` — Acceleration (starts slowly and ends quickly). Suitable for exits
-- `out_` — Deceleration (starts quickly and stops slowly). Suitable for entrances
-- `in_out_` — Accelerates in the first half and decelerates in the second
+- `in_` - Acceleration (starts slowly and ends quickly). Suitable for exits
+- `out_` - Deceleration (starts quickly and stops slowly). Suitable for entrances
+- `in_out_` - Accelerates in the first half and decelerates in the second
 
 - Linear : Constant speed (no change)
 - Quad : Gentlest acceleration and deceleration
@@ -3170,11 +3190,11 @@ Names combine a curve type and a direction.
 - Sine : Extremely gentle easing derived from a sine wave
 - Circ : Circular-arc curve that rises sharply at the endpoint
 - Expo : Extremely strong exponential easing
-- Back : **Overshoots once and then returns** (extends outside 0–1)
-- Elastic : **Oscillates like a spring before settling** (extends outside 0–1)
+- Back : **Overshoots once and then returns** (extends outside 0-1)
+- Elastic : **Oscillates like a spring before settling** (extends outside 0-1)
 - Bounce : Bounces as if against a floor
 
-Note that Back and Elastic can return values outside the 0–1 range; that excursion is the essence of their effect.
+Note that Back and Elastic can return values outside the 0-1 range; that excursion is the essence of their effect.
 
 Every function below takes one argument `t` (`number`, progress, not clamped) and returns a `number`, except `mt.ease.cubic_bezier`, whose signature is listed with it.
 
@@ -3200,15 +3220,15 @@ Every function below takes one argument `t` (`number`, progress, not clamped) an
 - `mt.ease.in_back(t)` : Easing that moves slightly backward in the negative direction immediately after the start, then accelerates toward the endpoint. : Progress that overshoots below 0 near the start
 - `mt.ease.out_back(t)` : Easing that passes slightly beyond the endpoint and then decelerates while returning. : Progress that overshoots above 1 near the endpoint
 - `mt.ease.in_out_back(t)` : Easing that overshoots near both the start and the endpoint. : Progress that symmetrically combines `in_back` and `out_back` around `t = 0.5`
-- `mt.ease.in_elastic(t)` : Easing that accelerates toward the endpoint while oscillating with increasing amplitude. : Progress that oscillates outside the 0–1 range. Returns `t` unchanged when `t <= 0` or `t >= 1`
-- `mt.ease.out_elastic(t)` : Easing that decelerates and converges while oscillating around the endpoint. : Progress that oscillates outside the 0–1 range. Returns `t` unchanged when `t <= 0` or `t >= 1`
+- `mt.ease.in_elastic(t)` : Easing that accelerates toward the endpoint while oscillating with increasing amplitude. : Progress that oscillates outside the 0-1 range. Returns `t` unchanged when `t <= 0` or `t >= 1`
+- `mt.ease.out_elastic(t)` : Easing that decelerates and converges while oscillating around the endpoint. : Progress that oscillates outside the 0-1 range. Returns `t` unchanged when `t <= 0` or `t >= 1`
 - `mt.ease.in_out_elastic(t)` : Easing that accelerates while oscillating in the first half, then decelerates and converges while oscillating in the second. : Progress that symmetrically combines `in_elastic` and `out_elastic` around `t = 0.5`
 - `mt.ease.in_bounce(t)` : Easing that bounces at the starting side before moving toward the endpoint. : Time-reversed `out_bounce` progress
 - `mt.ease.out_bounce(t)` : Easing that decelerates toward the endpoint with multiple bounces as if against a floor. : Progress representing bounces with a piecewise quadratic function
 - `mt.ease.in_out_bounce(t)` : Easing that bounces at both the starting and ending sides. : Progress that symmetrically combines `in_bounce` and `out_bounce` around `t = 0.5`
 - `mt.ease.cubic_bezier(x1, y1, x2, y2, t)` : Evaluates a cubic Bézier curve compatible with the CSS `cubic-bezier()` timing function. Use it to specify arbitrary easing numerically when the predefined curves above are insufficient. : Progress on the specified Bézier curve
 
-The three `circ` functions contain a square root, so normally constrain `t` to 0–1 before use.
+The three `circ` functions contain a square root, so normally constrain `t` to 0-1 before use.
 
 ##### `mt.ease.cubic_bezier` arguments
 
@@ -3216,7 +3236,7 @@ The three `circ` functions contain a square root, so normally constrain `t` to 0
 - `x2` / `y2` : `number` : Required : Second control point
 - `t` : `number` : Required : Progress. Fixed at `0` when `t <= 0` and at `1` when `t >= 1`
 
-When using it as a CSS-compatible monotonic timing curve, keep `x1` and `x2` within 0–1.
+When using it as a CSS-compatible monotonic timing curve, keep `x1` and `x2` within 0-1.
 
 ```lua
 -- Same curve as CSS ease-in-out
@@ -3265,7 +3285,7 @@ mt.layout.reflow(ctx, 0.02, {
 
 #### `mt.layout.group_by_line(ctx)`
 
-Groups shaped characters by `line_index` and returns them in the host’s reading order.
+Groups shaped characters by `line_index` and returns them in the host's reading order.
 The groups represent lines in horizontal writing and columns in vertical writing. It does not modify layout or character properties.
 
 ARGS
@@ -3311,7 +3331,7 @@ RET (multiple values)
 
 ##### Changes
 
-Directly updates the target’s `offset_x` and `offset_y`.
+Directly updates the target's `offset_x` and `offset_y`.
 
 ERRORS
 
@@ -3393,7 +3413,7 @@ RET (multiple values)
 1. `number` canvas normalized displacement -- Required `offsetX`
 2. `number` canvas normalized displacement -- Required `offsetY`
 
-The target’s fields are not modified.
+The target's fields are not modified.
 
 ERRORS
 
@@ -3447,7 +3467,7 @@ RET none
 
 ##### Changes
 
-Sets the target’s `pivot_x` and `pivot_y`, then corrects `offset_x` and `offset_y` so the pose does not move.
+Sets the target's `pivot_x` and `pivot_y`, then corrects `offset_x` and `offset_y` so the pose does not move.
 
 ##### `anchor`
 
@@ -3464,7 +3484,7 @@ Characters additionally support these anchors:
 - `"typesetting_origin"`: character-cell left edge on the horizontal baseline
 - `"vertical_start"` / `"vertical_center"` / `"vertical_end"`: vertical column axis at the character-cell start/center/end
 
-Existing pivot values are not 0–1 ratios within the bounds. `0.5` is the natural center; X is displacement as a ratio of canvas width, and Y is displacement as a ratio of canvas height. This function converts the bounds dimensions, character typesetting origin, and differing natural centers of characters and parts into the existing pivot units.
+Existing pivot values are not 0-1 ratios within the bounds. `0.5` is the natural center; X is displacement as a ratio of canvas width, and Y is displacement as a ratio of canvas height. This function converts the bounds dimensions, character typesetting origin, and differing natural centers of characters and parts into the existing pivot units.
 
 ```lua
 mt.layout.pivot_at_2d(ctx, character, "top")
@@ -3477,7 +3497,7 @@ character.rotation = math.sin(ctx.time * 3.0) * 8.0
 
 `space` (level `12+`) defaults to `"canvas"`. `"before_global_rotation"` removes only Global rotation around position + pivot while measuring; scale, stretch, individual transforms, and layout are preserved. Results remain Canvas-normalized Y-up coordinates. To draw in that frame, rotate the resulting geometry back around the same Global rotation center. Context and Inspector values are never modified.
 
-Transforms the natural bounding rectangles of the specified targets through the complete Global→character→part 2D hierarchy, then returns canvas-axis-aligned bounds enclosing all their vertices. When characters are specified, the natural bounds of their owned parts are combined; characters with no parts use the character’s natural bounds. Call it after writing the target fields.
+Transforms the natural bounding rectangles of the specified targets through the complete Global→character→part 2D hierarchy, then returns canvas-axis-aligned bounds enclosing all their vertices. When characters are specified, the natural bounds of their owned parts are combined; characters with no parts use the character's natural bounds. Call it after writing the target fields.
 
 These bounds are **before 3D, camera, projection, and Deform are applied**. They do not include stroke or shadow overhang, nor path-tight bounds for outlines containing whitespace within their natural bounding rectangle. For this stage and definition, the result is not an approximation: it incorporates rotation, pivot, negative stretch, parent-character transforms, and Global transforms.
 
@@ -3524,28 +3544,28 @@ local allPartBounds = mt.layout.measure_bounds_2d(ctx, nil, "part")
 
 #### `mt.layout.queue_on_path(ctx, path, options?)`
 
-Arranges characters (or parts) on a path created by `mt.path.arc_length` **in reading order**, and returns the distance ratio (0–1) occupied by each element.
+Arranges characters (or parts) on a path created by `mt.path.arc_length` **in reading order**, and returns the distance ratio (0-1) occupied by each element.
 
-Spacing is derived from the origin spacing that the **host actually typeset**, using the same method as `mt.layout.reflow`. Parameter settings such as `tracking`, per-character `margins`, and kerning are therefore reflected directly in the character advance along the path. `options.gap` is **additional spacing** added on top of that, so when `gap` is `0`, elements are arranged according to the host’s character advance.
+Spacing is derived from the origin spacing that the **host actually typeset**, using the same method as `mt.layout.reflow`. Parameter settings such as `tracking`, per-character `margins`, and kerning are therefore reflected directly in the character advance along the path. `options.gap` is **additional spacing** added on top of that, so when `gap` is `0`, elements are arranged according to the host's character advance.
 
 ARGS
 - `ctx` (`table`) `OnLayout` context
 - `path` (`table`) Return value of `mt.path.arc_length`
 - `options` (`table` default `nil`) Placement settings
 - `options.align` (`string` default `"end"`) Position at which to place the string. Specify `"end"`, `"start"`, or `"center"`
-- `options.gap` (`number` Ratio of canvas width default `0.0`) Additional spacing added to the host’s character advance
+- `options.gap` (`number` Ratio of canvas width default `0.0`) Additional spacing added to the host's character advance
 - `options.mode` (`string` default `"horizontal"`) Host typesetting direction: `"horizontal"` or `"vertical"`
 - `options.target_type` (`string` default `"character"`) Target type: `"character"` or `"part"`
 - `options.targets` (`table` default All elements) Array of target indices in reading order
 
 RET
-- `table` 0–1 -- `slots` array indexed like `ctx.chars` or `ctx.parts`, providing the distance ratio occupied by each element on the path
+- `table` 0-1 -- `slots` array indexed like `ctx.chars` or `ctx.parts`, providing the distance ratio occupied by each element on the path
 
 `slots` represents positions on the path, not animation progress.
 
 ##### Direction of Travel and Reading Order
 
-Slots are assigned in **ascending distance along the direction of travel**. The reference is the path’s direction, not left and right on the screen. If `targets` is omitted, slots are assigned by ascending index; therefore, if the path travels from left to right, this directly produces screen reading order.
+Slots are assigned in **ascending distance along the direction of travel**. The reference is the path's direction, not left and right on the screen. If `targets` is omitted, slots are assigned by ascending index; therefore, if the path travels from left to right, this directly produces screen reading order.
 
 > [!IMPORTANT]
 > **On a path traveling from right to left, ascending distance corresponds to decreasing x.** Therefore, when `targets` is omitted, character 1 is placed farthest right and character N farthest left, making the string appear **reversed on screen**.
@@ -3595,12 +3615,12 @@ end
 ```
 
 > [!NOTE]
-> If the string’s total length exceeds the path length, distance ratios are clamped to 0 and 1, causing **characters to overlap**.
+> If the string's total length exceeds the path length, distance ratios are clamped to 0 and 1, causing **characters to overlap**.
 > When placing long text on a short path, use `path:length()` to confirm that it fits.
 
 ### 16. Motion Paths
 
-These curve-evaluation APIs represent motion along control points, such as “flowing in” or “landing along an arc.”
+These curve-evaluation APIs represent motion along control points, such as "flowing in" or "landing along an arc."
 
 The coordinate system is not fixed. Points are plain `{ x, y }` tables. The functions accept whichever coordinate system the caller passes, such as normalized offset coordinates, canvas pixels, or character-local coordinates, and return values in the same coordinate system.
 
@@ -3618,7 +3638,7 @@ ARGS
 - `p1` (`table` coordinates) Control point near the start `{ x, y }`
 - `p2` (`table` coordinates) Control point near the end `{ x, y }`
 - `p3` (`table` coordinates) End point `{ x, y }`
-- `t` (`number` 0–1) Position on the curve. Values outside the range are not clamped and are extrapolated unchanged
+- `t` (`number` 0-1) Position on the curve. Values outside the range are not clamped and are extrapolated unchanged
 
 RET (multiple values)
 1. `number` As defined by the input coordinates -- `x` on the curve
@@ -3644,7 +3664,7 @@ Returns the coordinates and tangent on a Catmull-Rom spline passing through any 
 
 ARGS
 - `points` (`table` coordinates) 1-based array containing at least two `{ x, y }` points through which the curve passes
-- `t` (`number` 0–1) Progress across the entire curve. Clamped to 0–1
+- `t` (`number` 0-1) Progress across the entire curve. Clamped to 0-1
 
 RET (multiple values)
 1. `number` As defined by the input coordinates -- `x` on the curve
@@ -3687,7 +3707,7 @@ RET
 The path object has the following methods.
 
 - `path:length()` : `number` : As defined by the input coordinates : Total path length corrected for aspect ratio
-- `path:at_distance(distanceRatio)` : Three `number` values : As defined by the input coordinates, degrees : `x`, `y`, and `headingDegrees` at distance ratio 0–1
+- `path:at_distance(distanceRatio)` : Three `number` values : As defined by the input coordinates, degrees : `x`, `y`, and `headingDegrees` at distance ratio 0-1
 
 ERRORS
 
@@ -3826,7 +3846,7 @@ RET none
 
 ##### Changes
 
-Replaces the target’s path data and coordinate-normalization settings with the template contents.
+Replaces the target's path data and coordinate-normalization settings with the template contents.
 
 #### `path:set_svg(source)`
 
@@ -3950,7 +3970,7 @@ end)
 
 #### `mt.text.slice(text, startChar, endChar?)`
 
-Slices a string at UTF-8 code-point boundaries. Unlike Lua’s standard byte-based `string.sub`, it does not cut through an individual UTF-8 code point. Because it does not operate on grapheme clusters, it can split combining characters or ZWJ-joined emoji in the middle of what appears to be one character.
+Slices a string at UTF-8 code-point boundaries. Unlike Lua's standard byte-based `string.sub`, it does not cut through an individual UTF-8 code point. Because it does not operate on grapheme clusters, it can split combining characters or ZWJ-joined emoji in the middle of what appears to be one character.
 `ctx.chars[index].text` is a cluster after shaping and does not use the same index concept as this function.
 
 ARGS
@@ -4044,7 +4064,7 @@ ARGS
 - `fallbackDuration` (`number` seconds default `4.0`) Virtual clip length used for looping when the timeline is unavailable
 
 RET
-- `number` 0–1 -- Current progress
+- `number` 0-1 -- Current progress
 
 ERRORS
 
@@ -4101,8 +4121,8 @@ ARGS
 - `fallbackDuration` (`number` seconds default `4.0`) Virtual clip length used when the timeline is unavailable
 
 RET (multiple values)
-1. `number` 0–1 -- `introProgress`. Intro progress
-2. `number` 0–1 -- `outroProgress`. Outro progress
+1. `number` 0-1 -- `introProgress`. Intro progress
+2. `number` 0-1 -- `outroProgress`. Outro progress
 
 ```lua
 local intro, outro = mt.timeline.intro_outro_seconds(ctx, 0.8, 0.5)
@@ -4122,7 +4142,7 @@ ARGS
 - `duration` (`number` seconds) Length of the time window
 
 RET
-- `number` 0–1 -- Linear progress through the window, clamped before and after it
+- `number` 0-1 -- Linear progress through the window, clamped before and after it
 
 ERRORS
 
@@ -4147,7 +4167,7 @@ frame must also be localized before passing the context to time-dependent APIs.
 #### `mt.timeline.window_ctx(ctx, start, duration)`
 
 Creates a derived ctx for a specified time window from the original ctx. `start` is the starting time in seconds within the original ctx, and `duration` is a positive window length.
-The derived ctx’s `time` is `ctx.time - start` clamped to `0–duration`; `frame`, `timeline.duration_*`, and `timeline.progress` are also converted to the same local time basis.
+The derived ctx's `time` is `ctx.time - start` clamped to `0-duration`; `frame`, `timeline.duration_*`, and `timeline.progress` are also converted to the same local time basis.
 All other values, including canvas, Global, chars, and parts, are inherited from the original ctx.
 
 ARGS
@@ -4179,7 +4199,7 @@ This API does not copy the original ctx or shared characters and parts. It is a 
 #### `mt.timeline.chain(ctx, initialValue, segments, options?)`
 
 Evaluates pure functions for time intervals in sequence and passes the final return value of each completed interval to the next interval.
-An `evaluate` before the current time is evaluated with that interval’s end context, while only the current interval is evaluated with its interval-local `ctx`.
+An `evaluate` before the current time is evaluated with that interval's end context, while only the current interval is evaluated with its interval-local `ctx`.
 The return value may be any Lua value, including a number, color, or table combining coordinates and transforms.
 
 ARGS
@@ -4212,7 +4232,7 @@ local result = mt.timeline.chain(ctx, initialValue, {
 
 ##### Interval Context
 
-`segmentCtx` inherits canvas, Global, chars, parts, and other values from the caller’s `ctx`, replacing only time-related values with those of the current interval.
+`segmentCtx` inherits canvas, Global, chars, parts, and other values from the caller's `ctx`, replacing only time-related values with those of the current interval.
 It can be passed like a normal `ctx` to existing Level 3 APIs that read `ctx`, such as `mt.timeline.progress`.
 
 - `segmentCtx.time` : `number` : seconds : Time since the interval began
@@ -4220,7 +4240,7 @@ It can be passed like a normal `ctx` to existing Level 3 APIs that read `ctx`, s
 - `segmentCtx.fps` : `number` : fps : Same frame rate as the caller
 - `segmentCtx.timeline.duration_seconds` : `number` : seconds : Logical duration of the interval
 - `segmentCtx.timeline.duration_frames` : `number` : frame : Logical duration of the interval converted to frames
-- `segmentCtx.timeline.progress` : `number` : 0–1 : Progress within the interval
+- `segmentCtx.timeline.progress` : `number` : 0-1 : Progress within the interval
 
 ##### Interval Forms
 

@@ -1,4 +1,4 @@
-# Mug Typography — Documentation & Web Simulator
+# Mug Typography - Documentation & Web Simulator
 
 [![BOOTH Store](https://img.shields.io/badge/BOOTH-Get_Mug_Typography-red?style=for-the-badge&logo=booth)](https://muglab3.booth.pm/items/8339678)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](./LICENSE)

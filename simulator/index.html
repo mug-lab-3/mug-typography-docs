@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MT Sim — Web</title>
+<title>MT Sim - Web</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#252526">
-<meta name="mt-simulator-build" content="046066d489a9acfc">
-<meta name="mt-prelude-url" content="prelude-ae108529029c.lua">
-<meta name="mt-prelude-drawing-path-url" content="prelude_drawing_path-3e4364d9ad16.lua">
+<meta name="mt-simulator-build" content="c6e54564ab4fc403">
+<meta name="mt-prelude-url" content="prelude-7dcfeb4cf71c.lua">
+<meta name="mt-prelude-drawing-path-url" content="prelude_drawing_path-7973a48dda23.lua">
 <link rel="stylesheet" href="style-00bee200bbaa.css">
-<link rel="stylesheet" href="web-main-2BBQRXJK.css">
+<link rel="stylesheet" href="web-main-JQOFPL4D.css">
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -458,7 +458,7 @@
     outline-offset: -1px;
   }
   #lua-editor.drag-over::after {
-    content: "Drop .lua or .webm file to load";
+    content: "Drop .lua, .webm, or .svg file";
     position: absolute;
     inset: 0;
     z-index: 50;
@@ -698,6 +698,44 @@
   .sample-live-status { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1; font-size: 11px; overflow-wrap: anywhere; background: rgba(0, 0, 0, 0.7); }
   .sample-live-status:empty { display: none; }
   .sample-live-status[role="alert"] { color: #ff9d9d; }
+  /* Most previews are ready within a moment, and a message that comes and goes at once only flickers:
+     the spinner appears over the play button once loading has lasted a while, and goes at once. */
+  .sample-live-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .sample-live-loading::after {
+    content: "";
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 7px rgba(0, 0, 0, 0.65);
+    animation: sample-live-spin 0.8s linear infinite;
+  }
+  .sample-live-preview[data-preview-state="loading"] .sample-live-loading {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 200ms ease 350ms, visibility 0s linear 350ms;
+  }
+  .sample-live-preview[data-preview-state="loading"] .sample-live-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  @keyframes sample-live-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .sample-live-loading::after { animation-duration: 2.4s; } }
   .sample-live-time { color: #fff; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .sample-live-preview input[type="range"] { appearance: none; display: block; width: 100%; height: 12px; margin: 6px 0 0; background: transparent; cursor: pointer; }
   .sample-live-preview input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #eee var(--sample-preview-progress, 0%), #666 var(--sample-preview-progress, 0%)); }
@@ -1108,12 +1146,12 @@
 <div class="doc-viewer-overlay" id="webmcp-guide-overlay">
   <div class="doc-viewer-panel">
     <div class="doc-viewer-header">
-      <strong data-i18n="overlay.webmcpGuide">WebMCP Integration Guide</strong>
+      <strong data-i18n="overlay.webmcpGuide">AI Integration Guide</strong>
       <button id="close-webmcp-guide-button" class="overlay-close-button" type="button" aria-label="Close" title="Close">✕</button>
     </div>
     <div class="doc-viewer-body" id="webmcp-guide-body" style="padding: 16px; line-height: 1.6; font-size: 13px; color: #d4d4d4;"></div>
   </div>
 </div>
-<script type="module" src="web-main-2XENKXCH.js"></script>
+<script type="module" src="web-main-2SI2B6TK.js"></script>
 </body>
 </html>

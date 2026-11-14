@@ -1,4 +1,4 @@
-const CACHE_NAME = "mt-sim-8ce7a49e32a4eedb";
+const CACHE_NAME = "mt-sim-df65d377794d9db4";
 const PRECACHE_URLS = [
   "./",
   "apple-touch-icon.png",
@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   "chunks/bat-DXCZQHQY.js",
   "chunks/bicep-72L32CDL.js",
   "chunks/cameligo-33NXKP5V.js",
+  "chunks/chunk-2BSKPTM2.js",
   "chunks/chunk-4S7U6W2R.js",
   "chunks/chunk-B2ZZQ7KS.js",
   "chunks/chunk-FB5IOQ5D.js",
@@ -15,7 +16,6 @@ const PRECACHE_URLS = [
   "chunks/chunk-S3AD6ZLC.js",
   "chunks/chunk-SBH6H5CY.js",
   "chunks/chunk-TWVMZXCE.js",
-  "chunks/chunk-UFVVOZGH.js",
   "chunks/clojure-ET23FAMS.js",
   "chunks/coffee-O7QO3F5P.js",
   "chunks/cpp-AZAHPX26.js",
@@ -105,7 +105,7 @@ const PRECACHE_URLS = [
   "chunks/typescript-WUHWQLOS.js",
   "chunks/typespec-RB3RAFXR.js",
   "chunks/vb-5YQ2AFRN.js",
-  "chunks/videoRecorder-DAUTJD52.js",
+  "chunks/videoRecorder-X2YZMPFC.js",
   "chunks/vs-27UKW73T.css",
   "chunks/vs-UT3MSPX4.js",
   "chunks/wgsl-IWK4SOIV.js",
@@ -134,18 +134,18 @@ const PRECACHE_URLS = [
   "lua_api_for_ai.md",
   "manifest.json",
   "monaco-editor.worker-FFHZXEC4.js",
-  "prelude-ae108529029c.lua",
-  "prelude_drawing_path-3e4364d9ad16.lua",
+  "prelude-7dcfeb4cf71c.lua",
+  "prelude_drawing_path-7973a48dda23.lua",
   "sample-catalog.json",
   "style-00bee200bbaa.css",
   "third-party-notices.md",
   "tutorial/inspector_scripting_standard.webp",
   "tutorial/resolve_effect_library_presets.webp",
-  "web-main-2BBQRXJK.css",
-  "web-main-2XENKXCH.js"
+  "web-main-2SI2B6TK.js",
+  "web-main-JQOFPL4D.css"
 ];
 const DEVELOPMENT = false;
-const BUILD_ID = "046066d489a9acfc";
+const BUILD_ID = "c6e54564ab4fc403";
 const CACHE_PREFIX = "mt-sim-";
 const kPrecacheBatchSize = 8;
 const kFixedNameContent = [

@@ -143,7 +143,7 @@ available at https://mozilla.org/MPL/2.0/.
 mediabunny is used in unmodified form. Its Source Code Form, as defined by
 the license, is published at https://github.com/Vanilagy/mediabunny and is
 also available from the npm registry at
-https://registry.npmjs.org/mediabunny/-/mediabunny-1.62.1.tgz.
+https://registry.npmjs.org/mediabunny/-/mediabunny-1.66.0.tgz.
 
 ## Google Material Icons (Apache License 2.0)
 
@@ -901,7 +901,7 @@ Redistribution and use in source and binary forms, with or without modification,
 This software is provided by the copyright holders and contributors “as is” and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed. In no event shall the copyright owner or contributors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.
 ```
 
-## Dockview and dockview-core 7.0.4 (MIT)
+## Dockview and dockview-core 8.9.0 (MIT)
 
 Used only in the web build, for resizable application panel layouts.
 
