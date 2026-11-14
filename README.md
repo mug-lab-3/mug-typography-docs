@@ -11,8 +11,8 @@ This repository contains the published documentation and web simulator build for
 
 ## Published Sites
 
-- **User Manual**: [https://mug-lab-3.github.io/mug-typography-docs/](https://mug-lab-3.github.io/mug-typography-docs/)
-- **Web Simulator**: [https://mug-lab-3.github.io/mug-typography-docs/simulator/](https://mug-lab-3.github.io/mug-typography-docs/simulator/)
+- **User Manual**: [https://mug-typography.muglab3.com/](https://mug-typography.muglab3.com/)
+- **Web Simulator**: [https://mug-typography.muglab3.com/simulator/](https://mug-typography.muglab3.com/simulator/)
 
 ## License
 

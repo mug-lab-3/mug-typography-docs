@@ -1,0 +1,1 @@
+const a="/image/gradient_colorspace_oklab.webp",o="/image/gradient_colorspace_okhsl.webp",e="/image/gradient_colorspace_okhsv.webp",s="/image/gradient_colorspace_linear_rgb.webp",_="/image/gradient_crayon.webp";export{a as _,o as a,e as b,s as c,_ as d};
