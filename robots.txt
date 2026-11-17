@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mug-typography.muglab3.com/sitemap.xml
